@@ -14,7 +14,11 @@
             <div wire:key="s{{ $s->id }}" class="card flex flex-col p-4 sm:p-5">
                 <div class="flex items-start gap-4">
                     <div class="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-sky-100 text-sky-600 ring-2 ring-white shadow sm:h-16 sm:w-16">
+                        @if ($s->foto)
+                            <img src="{{ route('sedi.foto', $s->id) }}" alt="" class="h-full w-full object-cover">
+                        @else
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-4h6v4M9 10h.01M12 10h.01M15 10h.01M9 13h.01M12 13h.01M15 13h.01"/></svg>
+                        @endif
                     </div>
                     <div class="min-w-0 flex-1">
                         <p class="truncate text-xs font-semibold uppercase tracking-wide text-sky-600">{{ $s->cliente->ragione_sociale }}</p>

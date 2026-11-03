@@ -4,7 +4,7 @@ namespace App\Livewire;
 
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -63,8 +63,7 @@ class Profilo extends Component
         if ($this->foto) {
             $this->eliminaFotoEsistente($user);
             $nome = 'avatar_'.$user->id.'.'.strtolower($this->foto->getClientOriginalExtension());
-            File::ensureDirectoryExists(config('filesystems.avatar_path'));
-            File::move($this->foto->getRealPath(), rtrim(config('filesystems.avatar_path'), '/').'/'.$nome);
+            Storage::putFileAs(config('filesystems.private_paths.avatars'), $this->foto, $nome);
             $aggiornamenti['foto_path'] = $nome;
             $this->foto = null;
         }
@@ -111,7 +110,7 @@ class Profilo extends Component
     private function eliminaFotoEsistente(User $user): void
     {
         if ($user->foto_path) {
-            File::delete(rtrim(config('filesystems.avatar_path'), '/').'/'.basename($user->foto_path));
+            Storage::delete(trim(config('filesystems.private_paths.avatars'), '/').'/'.basename($user->foto_path));
         }
     }
 

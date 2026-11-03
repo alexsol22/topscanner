@@ -12,7 +12,7 @@ use App\Models\Legacy\OperatorePreferito;
 use App\Models\Legacy\Provincia;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -150,8 +150,7 @@ class Clienti extends Component
         ]);
         $documento->file = 'Doc_'.$cliente->id.'_'.time().'.'.$estensione;
 
-        File::ensureDirectoryExists(dirname($documento->percorso()));
-        File::move($this->fileDocumento->getRealPath(), $documento->percorso());
+        Storage::putFileAs(dirname($documento->percorso()), $this->fileDocumento, basename($documento->percorso()));
         $documento->save();
 
         $this->reset('titoloDocumento', 'fileDocumento');
@@ -161,7 +160,7 @@ class Clienti extends Component
     {
         $this->soloStaff();
         $documento = Documento::where('tipo', 'C')->where('id_tipo', $this->clientiVisibili()->findOrFail($this->clienteId)->id)->findOrFail($id);
-        File::delete($documento->percorso());
+        Storage::delete($documento->percorso());
         $documento->delete();
     }
 

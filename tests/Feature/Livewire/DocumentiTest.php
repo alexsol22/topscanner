@@ -3,11 +3,14 @@
 namespace Tests\Feature\Livewire;
 
 use App\Livewire\Documenti;
+use App\Models\Legacy\Documento;
 use App\Models\User;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -15,7 +18,10 @@ class DocumentiTest extends TestCase
 {
     public function test_documenti_are_filtered_by_client_operator_type_and_description(): void
     {
-        config(['database.connections.mysql' => config('database.connections.sqlite')]);
+        config([
+            'database.default' => 'mysql',
+            'database.connections.mysql' => config('database.connections.sqlite'),
+        ]);
         DB::purge('mysql');
         $this->createLegacySchema();
 
@@ -61,6 +67,54 @@ class DocumentiTest extends TestCase
             ->assertDontSee('Visita medica operatore alpha');
     }
 
+    public function test_staff_uploads_and_downloads_a_document_from_private_storage(): void
+    {
+        config([
+            'database.default' => 'mysql',
+            'database.connections.mysql' => config('database.connections.sqlite'),
+        ]);
+        DB::purge('mysql');
+        $this->createLegacySchema();
+
+        $staff = User::create([
+            'user_type' => 2,
+            'nome' => 'Staff',
+            'cognome' => 'User',
+            'email' => 'staff@example.test',
+            'password' => 'secret',
+        ]);
+        Auth::login($staff);
+        $clientId = DB::connection('mysql')->table('tc_clienti')->insertGetId([
+            'ragione_sociale' => 'Cliente Alpha',
+        ]);
+        Storage::fake('local');
+
+        Livewire::test(Documenti::class)
+            ->set('f', [
+                'titolo' => 'Contratto',
+                'tipo' => 'cliente',
+                'cliente_id' => (string) $clientId,
+                'user_id' => null,
+                'tipologia' => null,
+                'scadenza' => null,
+                'formazione' => false,
+            ])
+            ->set('file', UploadedFile::fake()->create('contratto.pdf', 5, 'application/pdf'))
+            ->call('salva')
+            ->assertHasNoErrors();
+
+        $documento = Documento::query()->firstOrFail();
+        $percorso = 'protected/documenti/Cliente_'.$clientId.'/'.$documento->file;
+        Storage::disk('local')->assertExists($percorso);
+        $this->assertSame(
+            true,
+            DB::connection('mysql')->table('tc_documenti')->where('id', $documento->id)->exists(),
+        );
+
+        $this->get(route('documenti.scarica', ['documento' => $documento->id, 'visualizza' => 1]))
+            ->assertOk();
+    }
+
     private function createLegacySchema(): void
     {
         Schema::connection('mysql')->create('tc_admin', function (Blueprint $table): void {
@@ -72,6 +126,17 @@ class DocumentiTest extends TestCase
             $table->string('email')->nullable();
             $table->string('password')->nullable();
             $table->unsignedInteger('user_type')->nullable();
+        });
+
+        Schema::connection('mysql')->create('_tracking', function (Blueprint $table): void {
+            $table->unsignedInteger('id')->primary();
+            $table->unsignedInteger('id_user')->nullable();
+            $table->string('addr')->nullable();
+            $table->string('host')->nullable();
+            $table->string('agent')->nullable();
+            $table->string('pagina')->nullable();
+            $table->dateTime('data_view')->nullable();
+            $table->text('action')->nullable();
         });
 
         Schema::connection('mysql')->create('tc_clienti', function (Blueprint $table): void {

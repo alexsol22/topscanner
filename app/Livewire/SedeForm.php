@@ -9,7 +9,7 @@ use App\Models\Legacy\Postazione;
 use App\Models\Legacy\Provincia;
 use App\Models\Legacy\Sede;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
@@ -196,10 +196,9 @@ class SedeForm extends Component
         }
 
         $nome = 'Postazione-principale-'.$sede->id.'-'.time().'.'.strtolower($this->foto->getClientOriginalExtension());
-        File::ensureDirectoryExists($sede->cartella());
-        File::move($this->foto->getRealPath(), $sede->cartella().'/'.$nome);
+        Storage::putFileAs($sede->cartella(), $this->foto, $nome);
         if ($sede->percorsoFoto()) {
-            File::delete($sede->percorsoFoto());
+            Storage::delete($sede->percorsoFoto());
         }
         $sede->update(['foto' => $nome]);
     }
@@ -207,7 +206,7 @@ class SedeForm extends Component
     private function salvaPostazioni(Sede $sede): void
     {
         $daEliminare = $sede->postazioni()->whereIn('id', $this->postazioniEliminate)->get();
-        $daEliminare->each(fn (Postazione $p) => File::deleteDirectory($p->cartella()));
+        $daEliminare->each(fn (Postazione $p) => Storage::deleteDirectory($p->cartella()));
         $sede->postazioni()->whereIn('id', $daEliminare->modelKeys())->delete();
 
         foreach ($this->postazioni as $chiave => $dati) {
@@ -229,9 +228,8 @@ class SedeForm extends Component
 
             if ($immagine = $this->immaginiPostazioni[$chiave] ?? null) {
                 $nome = 'Postazione-'.$postazione->id.'-'.time().'.'.strtolower($immagine->getClientOriginalExtension());
-                File::deleteDirectory($postazione->cartella());
-                File::ensureDirectoryExists($postazione->cartella());
-                File::move($immagine->getRealPath(), $postazione->cartella().'/'.$nome);
+                Storage::deleteDirectory($postazione->cartella());
+                Storage::putFileAs($postazione->cartella(), $immagine, $nome);
                 $postazione->update(['file' => $nome]);
             }
         }

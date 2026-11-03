@@ -10,6 +10,7 @@ use App\Models\Legacy\Postazione;
 use App\Models\Legacy\Sede;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class DownloadController extends Controller
 {
@@ -21,7 +22,8 @@ class DownloadController extends Controller
             $user->isCliente() => $documento->tipo === 'C' && (int) $documento->id_tipo === (int) $user->cliente_id,
             default => $documento->tipo === 'O' && (int) $documento->id_tipo === (int) $user->id,
         };
-        abort_unless($consentito && is_file($documento->percorso()), 404);
+        $percorso = $documento->percorso();
+        abort_unless($consentito && Storage::exists($percorso), 404);
 
         if ($documento->tipo === 'O' && (int) $documento->id_tipo === (int) $user->id) {
             DocumentoView::updateOrCreate(
@@ -31,28 +33,28 @@ class DownloadController extends Controller
         }
 
         if ($request->boolean('visualizza')) {
-            return response()->file($documento->percorso());
+            return Storage::response($percorso);
         }
 
-        return response()->download($documento->percorso());
+        return Storage::download($percorso);
     }
 
     public function fotoSede(Sede $sede)
     {
         $this->autorizzaSede((int) $sede->id_cliente);
         $percorso = $sede->percorsoFoto();
-        abort_unless($percorso && is_file($percorso), 404);
+        abort_unless($percorso && Storage::exists($percorso), 404);
 
-        return response()->file($percorso, ['Cache-Control' => 'private, max-age=3600']);
+        return Storage::response($percorso, null, ['Cache-Control' => 'private, max-age=3600']);
     }
 
     public function immaginePostazione(Postazione $postazione)
     {
         $this->autorizzaSede((int) $postazione->id_cliente);
         $percorso = $postazione->percorsoFile();
-        abort_unless($percorso && is_file($percorso), 404);
+        abort_unless($percorso && Storage::exists($percorso), 404);
 
-        return response()->file($percorso, ['Cache-Control' => 'private, max-age=3600']);
+        return Storage::response($percorso, null, ['Cache-Control' => 'private, max-age=3600']);
     }
 
     private function autorizzaSede(int $clienteId): void
@@ -64,10 +66,10 @@ class DownloadController extends Controller
     {
         $corrente = auth()->user();
         abort_unless($corrente->id === $user->id || $corrente->isStaff(), 403);
-        $percorso = rtrim(config('filesystems.avatar_path'), '/').'/'.basename((string) $user->foto_path);
-        abort_unless($user->foto_path && is_file($percorso), 404);
+        $percorso = trim(config('filesystems.private_paths.avatars'), '/').'/'.basename((string) $user->foto_path);
+        abort_unless($user->foto_path && Storage::exists($percorso), 404);
 
-        return response()->file($percorso, ['Cache-Control' => 'private, max-age=3600']);
+        return Storage::response($percorso, null, ['Cache-Control' => 'private, max-age=3600']);
     }
 
     public function presenze(Request $request)

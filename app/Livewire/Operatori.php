@@ -11,7 +11,7 @@ use App\Models\Legacy\Provincia;
 use App\Models\Legacy\TipoMateriale;
 use App\Models\User;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
@@ -151,8 +151,7 @@ class Operatori extends Component
 
         if ($this->avatar) {
             $nome = 'avatar_'.$u->id.'.'.strtolower($this->avatar->getClientOriginalExtension());
-            File::ensureDirectoryExists(config('filesystems.avatar_path'));
-            File::move($this->avatar->getRealPath(), rtrim(config('filesystems.avatar_path'), '/').'/'.$nome);
+            Storage::putFileAs(config('filesystems.private_paths.avatars'), $this->avatar, $nome);
             $u->update(['avatar' => $nome]);
         }
 
@@ -199,8 +198,7 @@ class Operatori extends Component
         $documento = new Documento($dati + ['id_tipo' => $operatore->id, 'tipo' => 'O', 'admin' => 'N', 'icona' => self::ICONE[$estensione] ?? 'file-alt']);
         $documento->file = $prefisso.'_'.$operatore->nome.'_'.$operatore->cognome.'-'.$operatore->id.'_'.time().'.'.$estensione;
 
-        File::ensureDirectoryExists(dirname($documento->percorso()));
-        File::move($file->getRealPath(), $documento->percorso());
+        Storage::putFileAs(dirname($documento->percorso()), $file, basename($documento->percorso()));
         $documento->save();
     }
 
@@ -223,7 +221,7 @@ class Operatori extends Component
     public function eliminaDocumento(int $id): void
     {
         $documento = Documento::where('tipo', 'O')->where('id_tipo', $this->operatoreCorrente()->id)->findOrFail($id);
-        File::delete($documento->percorso());
+        Storage::delete($documento->percorso());
         $documento->delete();
     }
 

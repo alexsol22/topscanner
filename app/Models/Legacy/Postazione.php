@@ -32,7 +32,7 @@ class Postazione extends LegacyModel
 
     public function cartella(): string
     {
-        return rtrim(config('filesystems.documenti_path'), '/').'/Cliente_'.$this->id_cliente.'/Sede_'.$this->id_sede.'/Postazione_'.$this->id;
+        return trim(config('filesystems.private_paths.documenti'), '/').'/Cliente_'.$this->id_cliente.'/Sede_'.$this->id_sede.'/Postazione_'.$this->id;
     }
 
     public function percorsoFile(): ?string

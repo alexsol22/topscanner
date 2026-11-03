@@ -48,15 +48,15 @@ class Documento extends LegacyModel
         return $this->hasOne(DocumentoView::class, 'id_documento');
     }
 
-    /** Cartella dei file come in Yii: protected/documenti/{Cliente_|Operatore_}{id_tipo}. */
+    /** Cartella dei file su disco privato, mantenendo il percorso legacy. */
     public function cartella(): string
     {
-        return ($this->tipo === 'C' ? 'Cliente_' : 'Operatore_').$this->id_tipo;
+        return trim(config('filesystems.private_paths.documenti'), '/').'/'.($this->tipo === 'C' ? 'Cliente_' : 'Operatore_').$this->id_tipo;
     }
 
     public function percorso(): string
     {
-        return rtrim(config('filesystems.documenti_path'), '/').'/'.$this->cartella().'/'.$this->file;
+        return $this->cartella().'/'.$this->file;
     }
 
     public function inScadenza(): bool

@@ -13,15 +13,10 @@ return [
     |
     */
 
-    /*
-    | Cartella dei documenti dell'app Yii (protected/documenti), condivisa per mantenere i file identici.
-    */
-    'documenti_path' => env('DOCUMENTI_PATH', base_path('s420/protected/documenti')),
-
-    /*
-    | Cartella degli avatar dell'app Yii (images/avatar); nel DB resta solo il nome file.
-    */
-    'avatar_path' => env('AVATAR_PATH', base_path('s420/images/avatar')),
+    'private_paths' => [
+        'documenti' => 'protected/documenti',
+        'avatars' => 'images/avatar',
+    ],
 
     'default' => env('FILESYSTEM_DISK', 'local'),
 
@@ -44,7 +39,7 @@ return [
             'driver' => 'local',
             'root' => storage_path('app/private'),
             'serve' => true,
-            'throw' => false,
+            'throw' => true,
             'report' => false,
         ],
 
@@ -66,7 +61,7 @@ return [
             'url' => env('AWS_URL'),
             'endpoint' => env('AWS_ENDPOINT'),
             'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
-            'throw' => false,
+            'throw' => true,
             'report' => false,
         ],
 

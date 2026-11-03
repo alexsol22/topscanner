@@ -56,10 +56,10 @@ class Sede extends LegacyModel
         return $this->hasMany(Gda::class, 'id_sede');
     }
 
-    /** Cartella dei file come in Yii: protected/documenti/Cliente_{id}/Sede_{id}. */
+    /** Cartella dei file su disco privato, mantenendo il percorso legacy. */
     public function cartella(): string
     {
-        return rtrim(config('filesystems.documenti_path'), '/').'/Cliente_'.$this->id_cliente.'/Sede_'.$this->id;
+        return trim(config('filesystems.private_paths.documenti'), '/').'/Cliente_'.$this->id_cliente.'/Sede_'.$this->id;
     }
 
     public function percorsoFoto(): ?string
