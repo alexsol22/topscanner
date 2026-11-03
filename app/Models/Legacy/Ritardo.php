@@ -8,6 +8,18 @@ class Ritardo extends LegacyModel
 {
     protected $table = 'tc_ritardi';
 
+    public $incrementing = false;
+
+    /** Nel dump la colonna id non ha AUTO_INCREMENT: l'id viene assegnato qui, senza modificare lo schema. */
+    protected static function booted(): void
+    {
+        static::creating(function (self $ritardo) {
+            if (! $ritardo->getKey()) {
+                $ritardo->id = (int) static::query()->max('id') + 1;
+            }
+        });
+    }
+
     protected function casts(): array
     {
         return [
