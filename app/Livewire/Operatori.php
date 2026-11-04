@@ -151,7 +151,7 @@ class Operatori extends Component
 
         if ($this->avatar) {
             $nome = 'avatar_'.$u->id.'.'.strtolower($this->avatar->getClientOriginalExtension());
-            Storage::putFileAs(config('filesystems.private_paths.avatars'), $this->avatar, $nome);
+            Storage::disk(config('filesystems.files_disk'))->putFileAs(config('filesystems.private_paths.avatars'), $this->avatar, $nome);
             $u->update(['avatar' => $nome]);
         }
 
@@ -198,7 +198,7 @@ class Operatori extends Component
         $documento = new Documento($dati + ['id_tipo' => $operatore->id, 'tipo' => 'O', 'admin' => 'N', 'icona' => self::ICONE[$estensione] ?? 'file-alt']);
         $documento->file = $prefisso.'_'.$operatore->nome.'_'.$operatore->cognome.'-'.$operatore->id.'_'.time().'.'.$estensione;
 
-        Storage::putFileAs(dirname($documento->percorso()), $file, basename($documento->percorso()));
+        Storage::disk(config('filesystems.files_disk'))->putFileAs(dirname($documento->percorso()), $file, basename($documento->percorso()));
         $documento->save();
     }
 
@@ -221,7 +221,7 @@ class Operatori extends Component
     public function eliminaDocumento(int $id): void
     {
         $documento = Documento::where('tipo', 'O')->where('id_tipo', $this->operatoreCorrente()->id)->findOrFail($id);
-        Storage::delete($documento->percorso());
+        Storage::disk(config('filesystems.files_disk'))->delete($documento->percorso());
         $documento->delete();
     }
 

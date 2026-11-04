@@ -59,7 +59,7 @@ class MigrateLegacyFilesToStorage extends Command
         $files = new RecursiveIteratorIterator(
             new RecursiveDirectoryIterator($source, RecursiveDirectoryIterator::SKIP_DOTS),
         );
-        $disk = Storage::disk();
+        $disk = Storage::disk(config('filesystems.files_disk'));
 
         /** @var SplFileInfo $file */
         foreach ($files as $file) {
@@ -120,7 +120,7 @@ class MigrateLegacyFilesToStorage extends Command
 
     private function storageHash(string $path): string
     {
-        $stream = Storage::disk()->readStream($path);
+        $stream = Storage::disk(config('filesystems.files_disk'))->readStream($path);
         if ($stream === false) {
             throw new RuntimeException("Unable to read destination file: {$path}");
         }

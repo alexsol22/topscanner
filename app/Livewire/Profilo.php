@@ -63,7 +63,7 @@ class Profilo extends Component
         if ($this->foto) {
             $this->eliminaFotoEsistente($user);
             $nome = 'avatar_'.$user->id.'.'.strtolower($this->foto->getClientOriginalExtension());
-            Storage::putFileAs(config('filesystems.private_paths.avatars'), $this->foto, $nome);
+            Storage::disk(config('filesystems.files_disk'))->putFileAs(config('filesystems.private_paths.avatars'), $this->foto, $nome);
             $aggiornamenti['foto_path'] = $nome;
             $this->foto = null;
         }
@@ -110,7 +110,7 @@ class Profilo extends Component
     private function eliminaFotoEsistente(User $user): void
     {
         if ($user->foto_path) {
-            Storage::delete(trim(config('filesystems.private_paths.avatars'), '/').'/'.basename($user->foto_path));
+            Storage::disk(config('filesystems.files_disk'))->delete(trim(config('filesystems.private_paths.avatars'), '/').'/'.basename($user->foto_path));
         }
     }
 

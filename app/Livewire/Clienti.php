@@ -150,7 +150,7 @@ class Clienti extends Component
         ]);
         $documento->file = 'Doc_'.$cliente->id.'_'.time().'.'.$estensione;
 
-        Storage::putFileAs(dirname($documento->percorso()), $this->fileDocumento, basename($documento->percorso()));
+        Storage::disk(config('filesystems.files_disk'))->putFileAs(dirname($documento->percorso()), $this->fileDocumento, basename($documento->percorso()));
         $documento->save();
 
         $this->reset('titoloDocumento', 'fileDocumento');
@@ -160,7 +160,7 @@ class Clienti extends Component
     {
         $this->soloStaff();
         $documento = Documento::where('tipo', 'C')->where('id_tipo', $this->clientiVisibili()->findOrFail($this->clienteId)->id)->findOrFail($id);
-        Storage::delete($documento->percorso());
+        Storage::disk(config('filesystems.files_disk'))->delete($documento->percorso());
         $documento->delete();
     }
 

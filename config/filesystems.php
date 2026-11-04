@@ -20,6 +20,9 @@ return [
 
     'default' => env('FILESYSTEM_DISK', 'local'),
 
+    // Disco per documenti e avatar: segue FILESYSTEM_DISK (local in locale, r2 su Cloud).
+    'files_disk' => env('FILES_DISK', env('FILESYSTEM_DISK', 'local')),
+
     /*
     |--------------------------------------------------------------------------
     | Filesystem Disks

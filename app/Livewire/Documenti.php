@@ -98,7 +98,7 @@ class Documenti extends Component
         ]);
         $documento->file = ($cliente ? 'Doc_' : 'Documento_').$idTipo.'_'.time().'.'.$estensione;
 
-        Storage::putFileAs(dirname($documento->percorso()), $this->file, basename($documento->percorso()));
+        Storage::disk(config('filesystems.files_disk'))->putFileAs(dirname($documento->percorso()), $this->file, basename($documento->percorso()));
         $documento->save();
 
         if (! $cliente) {

@@ -196,9 +196,9 @@ class SedeForm extends Component
         }
 
         $nome = 'Postazione-principale-'.$sede->id.'-'.time().'.'.strtolower($this->foto->getClientOriginalExtension());
-        Storage::putFileAs($sede->cartella(), $this->foto, $nome);
+        Storage::disk(config('filesystems.files_disk'))->putFileAs($sede->cartella(), $this->foto, $nome);
         if ($sede->percorsoFoto()) {
-            Storage::delete($sede->percorsoFoto());
+            Storage::disk(config('filesystems.files_disk'))->delete($sede->percorsoFoto());
         }
         $sede->update(['foto' => $nome]);
     }
@@ -206,7 +206,7 @@ class SedeForm extends Component
     private function salvaPostazioni(Sede $sede): void
     {
         $daEliminare = $sede->postazioni()->whereIn('id', $this->postazioniEliminate)->get();
-        $daEliminare->each(fn (Postazione $p) => Storage::deleteDirectory($p->cartella()));
+        $daEliminare->each(fn (Postazione $p) => Storage::disk(config('filesystems.files_disk'))->deleteDirectory($p->cartella()));
         $sede->postazioni()->whereIn('id', $daEliminare->modelKeys())->delete();
 
         foreach ($this->postazioni as $chiave => $dati) {
@@ -228,8 +228,8 @@ class SedeForm extends Component
 
             if ($immagine = $this->immaginiPostazioni[$chiave] ?? null) {
                 $nome = 'Postazione-'.$postazione->id.'-'.time().'.'.strtolower($immagine->getClientOriginalExtension());
-                Storage::deleteDirectory($postazione->cartella());
-                Storage::putFileAs($postazione->cartella(), $immagine, $nome);
+                Storage::disk(config('filesystems.files_disk'))->deleteDirectory($postazione->cartella());
+                Storage::disk(config('filesystems.files_disk'))->putFileAs($postazione->cartella(), $immagine, $nome);
                 $postazione->update(['file' => $nome]);
             }
         }
