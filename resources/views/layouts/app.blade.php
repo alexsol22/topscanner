@@ -24,6 +24,7 @@
             ['documenti', 'Documenti', 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z', ['super_admin', 'admin', 'cliente', 'operatore']],
         ],
     ];
+    $vociDisabilitate = ['sedi', 'turni', 'presenze', 'bacheca', 'messaggi', 'messaggi.modelli', 'documenti'];
     $paroleChiaveRicerca = [
         'dashboard' => 'dashboard panoramica riepilogo statistiche iniziale',
         'amministratori' => 'admin amministratori utenti account accessi',
@@ -41,7 +42,7 @@
     ];
     $ricercaVoci = collect($menu)
         ->flatMap(fn ($voci, $gruppo) => collect($voci)
-            ->filter(fn ($voce) => in_array($ruolo, $voce[3], true))
+            ->filter(fn ($voce) => in_array($ruolo, $voce[3], true) && ! in_array($voce[0], $vociDisabilitate, true))
             ->map(fn ($voce) => [
                 'nome' => $voce[1],
                 'gruppo' => $gruppo,
@@ -84,6 +85,14 @@
                     @if ($vociVisibili)
                         <div class="px-3 pb-1 pt-4 text-[10px] font-bold uppercase tracking-widest text-slate-400 first:pt-0">{{ $gruppo }}</div>
                         @foreach ($vociVisibili as [$route, $label, $icon, $ruoli])
+                            @if (in_array($route, $vociDisabilitate, true))
+                                <span class="flex cursor-not-allowed items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-300" aria-disabled="true" title="Disponibile prossimamente">
+                                    <svg class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="{{ $icon }}"/></svg>
+                                    {{ $label }}
+                                    <span class="ml-auto rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Presto</span>
+                                </span>
+                                @continue
+                            @endif
                             <a href="{{ route($route) }}" wire:navigate @click="chiudiMobile()"
                                class="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition {{ request()->routeIs($route) ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-100' : 'text-slate-600 hover:bg-sky-50/70 hover:text-sky-700' }}">
                                 <svg class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="{{ $icon }}"/></svg>

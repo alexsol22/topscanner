@@ -22,6 +22,7 @@
                 <input type="checkbox" wire:model="remember" class="rounded border-sky-300 text-sky-500 focus:ring-sky-300"> Ricordami
             </label>
             <button class="btn-primary w-full" wire:loading.attr="disabled">Accedi</button>
+            <p class="text-center text-sm"><a href="{{ route('password.recupero') }}" wire:navigate class="text-sky-600 hover:underline">Password dimenticata?</a></p>
         </form>
     </div>
 </div>

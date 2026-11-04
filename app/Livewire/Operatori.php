@@ -7,6 +7,7 @@ use App\Models\Legacy\Certificato;
 use App\Models\Legacy\Cliente;
 use App\Models\Legacy\Documento;
 use App\Models\Legacy\Materiale;
+use App\Models\Legacy\Messaggio;
 use App\Models\Legacy\Provincia;
 use App\Models\Legacy\TipoMateriale;
 use App\Models\User;
@@ -45,11 +46,20 @@ class Operatori extends Component
 
     public $fileFormazione;
 
+    /** @var array<int, array{inizio: string, fine: string, descrizione: string}> */
+    public array $righeFormazioni = [];
+
+    /** @var array<int, mixed> file sostitutivi per riga, indicizzati per id documento */
+    public array $fileRigheFormazioni = [];
+
     public array $attestato = [];
 
     public $fileAttestato;
 
     public array $materiale = [];
+
+    /** @var array<int, array{id_materiale: string, descrizione: string, taglia: string, riconsegna: string, consegnato: bool}> */
+    public array $righeMateriali = [];
 
     #[Url(as: 'id')]
     public ?int $userId = null;
@@ -121,11 +131,13 @@ class Operatori extends Component
             'indirizzo' => $u->indirizzo ?? '', 'provincia' => $u->provincia ? (string) $u->provincia : '', 'iban' => $u->iban ?? '',
         ];
         $this->apriForm();
+        $this->caricaMateriali();
+        $this->caricaFormazioni();
     }
 
     private function apriForm(): void
     {
-        $this->reset('tab', 'avatar', 'formazione', 'fileFormazione', 'attestato', 'fileAttestato', 'materiale');
+        $this->reset('tab', 'avatar', 'formazione', 'fileFormazione', 'righeFormazioni', 'fileRigheFormazioni', 'attestato', 'fileAttestato', 'materiale', 'righeMateriali');
         $this->resetValidation();
         $this->editing = true;
     }
@@ -172,6 +184,51 @@ class Operatori extends Component
             'inizio' => $this->formazione['inizio'] ?? null ?: null, 'fine' => $this->formazione['fine'] ?? null ?: null,
         ]);
         $this->reset('formazione', 'fileFormazione');
+        $this->caricaFormazioni();
+    }
+
+    public function salvaFormazione(int $id): void
+    {
+        $this->validate([
+            "righeFormazioni.$id.inizio" => 'nullable|date',
+            "righeFormazioni.$id.fine" => "nullable|date|after_or_equal:righeFormazioni.$id.inizio",
+            "righeFormazioni.$id.descrizione" => 'required|string|max:255',
+            "fileRigheFormazioni.$id" => 'nullable|file|max:10240|mimes:'.self::ESTENSIONI,
+        ], [], ["righeFormazioni.$id.descrizione" => 'titolo', "righeFormazioni.$id.inizio" => 'data inizio', "righeFormazioni.$id.fine" => 'data fine', "fileRigheFormazioni.$id" => 'file']);
+
+        $operatore = $this->operatoreCorrente();
+        $documento = Documento::where('tipo', 'O')->where('id_tipo', $operatore->id)->where('formazione', 'Y')->findOrFail($id);
+        $riga = $this->righeFormazioni[$id];
+        $dati = [
+            'descrizione' => $riga['descrizione'],
+            'inizio' => ($riga['inizio'] ?? null) ?: null,
+            'fine' => ($riga['fine'] ?? null) ?: null,
+        ];
+
+        $file = $this->fileRigheFormazioni[$id] ?? null;
+        if ($file) {
+            $disco = Storage::disk(config('filesystems.files_disk'));
+            $vecchioPercorso = $documento->percorso();
+            $estensione = strtolower($file->getClientOriginalExtension());
+            $documento->file = 'Formazione_'.$operatore->nome.'_'.$operatore->cognome.'-'.$operatore->id.'_'.time().'.'.$estensione;
+            $disco->putFileAs(dirname($documento->percorso()), $file, basename($documento->percorso()));
+            $disco->delete($vecchioPercorso);
+            $dati += ['file' => $documento->file, 'icona' => self::ICONE[$estensione] ?? 'file-alt'];
+        }
+
+        $documento->update($dati);
+        unset($this->fileRigheFormazioni[$id]);
+        $this->caricaFormazioni();
+    }
+
+    private function caricaFormazioni(): void
+    {
+        $this->righeFormazioni = Documento::where('tipo', 'O')->where('id_tipo', $this->operatoreCorrente()->id)->where('formazione', 'Y')->orderByDesc('id')->get()
+            ->mapWithKeys(fn (Documento $d) => [$d->id => [
+                'inizio' => $d->inizio?->format('Y-m-d') ?? '',
+                'fine' => $d->fine?->format('Y-m-d') ?? '',
+                'descrizione' => $d->descrizione ?? '',
+            ]])->all();
     }
 
     public function aggiungiAttestato(): void
@@ -223,6 +280,7 @@ class Operatori extends Component
         $documento = Documento::where('tipo', 'O')->where('id_tipo', $this->operatoreCorrente()->id)->findOrFail($id);
         Storage::disk(config('filesystems.files_disk'))->delete($documento->percorso());
         $documento->delete();
+        $this->caricaFormazioni();
     }
 
     public function aggiungiMateriale(): void
@@ -234,26 +292,53 @@ class Operatori extends Component
             'materiale.riconsegna' => 'nullable|date',
         ], [], ['materiale.id_materiale' => 'materiale']);
 
-        Materiale::create([
-            'id_operatore' => $this->operatoreCorrente()->id,
-            'id_materiale' => $this->materiale['id_materiale'],
-            'descrizione' => $this->materiale['descrizione'] ?? null,
-            'taglia' => $this->materiale['taglia'] ?? null,
-            'riconsegna' => $this->materiale['riconsegna'] ?? null ?: null,
-            'consegnato' => ! empty($this->materiale['consegnato']) ? 'Y' : 'N',
-        ]);
+        Materiale::create($this->datiMateriale($this->materiale) + ['id_operatore' => $this->operatoreCorrente()->id]);
+
         $this->reset('materiale');
+        $this->caricaMateriali();
     }
 
-    public function consegnaMateriale(int $id): void
+    public function salvaMateriale(int $id): void
     {
-        $m = Materiale::where('id_operatore', $this->operatoreCorrente()->id)->findOrFail($id);
-        $m->update(['consegnato' => $m->consegnato ? 'N' : 'Y']);
+        $this->validate([
+            "righeMateriali.$id.id_materiale" => 'required|exists:_materiali,id',
+            "righeMateriali.$id.descrizione" => 'nullable|string|max:255',
+            "righeMateriali.$id.taglia" => 'nullable|string|max:255',
+            "righeMateriali.$id.riconsegna" => 'nullable|date',
+        ], [], ["righeMateriali.$id.id_materiale" => 'materiale']);
+
+        Materiale::where('id_operatore', $this->operatoreCorrente()->id)->findOrFail($id)->update($this->datiMateriale($this->righeMateriali[$id]));
+        $this->caricaMateriali();
     }
 
     public function eliminaMateriale(int $id): void
     {
         Materiale::where('id_operatore', $this->operatoreCorrente()->id)->findOrFail($id)->delete();
+        $this->caricaMateriali();
+    }
+
+    private function caricaMateriali(): void
+    {
+        $this->righeMateriali = Materiale::where('id_operatore', $this->operatoreCorrente()->id)->orderByDesc('id')->get()
+            ->mapWithKeys(fn (Materiale $m) => [$m->id => [
+                'id_materiale' => (string) $m->id_materiale,
+                'descrizione' => $m->descrizione ?? '',
+                'taglia' => $m->taglia ?? '',
+                'riconsegna' => $m->riconsegna?->format('Y-m-d') ?? '',
+                'consegnato' => (bool) $m->consegnato,
+            ]])->all();
+    }
+
+    /** @param  array<string, mixed>  $riga */
+    private function datiMateriale(array $riga): array
+    {
+        return [
+            'id_materiale' => $riga['id_materiale'],
+            'descrizione' => ($riga['descrizione'] ?? null) ?: null,
+            'taglia' => ($riga['taglia'] ?? null) ?: null,
+            'riconsegna' => ($riga['riconsegna'] ?? null) ?: null,
+            'consegnato' => ! empty($riga['consegnato']) ? 'Y' : 'N',
+        ];
     }
 
     private function operatoreCorrente(): User
@@ -292,9 +377,8 @@ class Operatori extends Component
         return view('livewire.operatori', [
             'utenti' => $utenti,
             'province' => Provincia::orderBy('nome')->get(['id', 'nome', 'sigla']),
-            'formazioni' => $conSezioni ? Documento::where('tipo', 'O')->where('id_tipo', $this->userId)->where('formazione', 'Y')->orderByDesc('id')->get() : collect(),
             'attestati' => $conSezioni ? Documento::with('certificato')->where('tipo', 'O')->where('id_tipo', $this->userId)->where('formazione', 'N')->orderByDesc('id')->get() : collect(),
-            'materiali' => $conSezioni ? Materiale::with('tipo')->where('id_operatore', $this->userId)->orderByDesc('id')->get() : collect(),
+            'limitePromemoria' => today()->addDays((int) Messaggio::find(5)?->giorni),
             'tipiCertificato' => $conSezioni ? Certificato::orderBy('nome')->get() : collect(),
             'tipiMateriale' => $conSezioni ? TipoMateriale::orderBy('nome')->get() : collect(),
             'clienti' => Cliente::orderBy('ragione_sociale')->get(['id', 'ragione_sociale']),

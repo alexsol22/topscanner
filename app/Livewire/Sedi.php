@@ -9,6 +9,7 @@ use App\Models\Legacy\Postazione;
 use App\Models\Legacy\Turno;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
+use Livewire\Attributes\Url;
 use Livewire\Component;
 use Livewire\WithPagination;
 
@@ -20,6 +21,7 @@ class Sedi extends Component
 
     public string $cerca = '';
 
+    #[Url(as: 'cliente')]
     public ?int $filtroCliente = null;
 
     public bool $modalPostazioni = false;

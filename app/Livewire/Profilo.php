@@ -37,9 +37,9 @@ class Profilo extends Component
     public function mount(): void
     {
         $user = $this->utente();
-        $this->name = $user->name;
+        $this->name = $user->name ?? '';
         $this->cognome = $user->cognome ?? '';
-        $this->email = $user->email;
+        $this->email = $user->email ?? '';
         $this->cellulare = $user->cellulare ?? '';
     }
 

@@ -3,6 +3,7 @@
 namespace App\Livewire;
 
 use App\Livewire\Concerns\ConAccesso;
+use App\Mail\NotificaHtml;
 use App\Models\Legacy\Admin;
 use App\Models\Legacy\Cliente;
 use App\Models\Legacy\Comune;
@@ -12,8 +13,10 @@ use App\Models\Legacy\OperatorePreferito;
 use App\Models\Legacy\Provincia;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
@@ -179,40 +182,80 @@ class Clienti extends Component
     public function salva(): void
     {
         $this->soloStaff();
-        $this->validate();
+
+        try {
+            $this->validate();
+        } catch (ValidationException $e) {
+            $this->tab = 'dati';
+            $this->dispatch('scorri-al-primo-errore');
+
+            throw $e;
+        }
+
         $dati = array_map(fn ($v) => $v === '' ? null : $v, $this->f);
         $dati['accesso'] = ! empty($this->f['accesso']) && $this->f['accesso'] !== 'N' ? 'Y' : 'N';
         $dati['cellulare'] ??= '';
 
-        if ($this->clienteId) {
-            $this->clientiVisibili()->findOrFail($this->clienteId)->update($dati);
-            $this->salvaOperatori($this->clienteId);
-        } else {
-            DB::connection('mysql')->transaction(function () use ($dati) {
+        $nuovoAccount = null;
+
+        DB::connection('mysql')->transaction(function () use ($dati, &$nuovoAccount) {
+            if ($this->clienteId) {
+                $cliente = $this->clientiVisibili()->findOrFail($this->clienteId);
+                $cliente->update($dati);
+            } else {
                 $cliente = Cliente::create($dati + ['pos' => '', 'lat' => 0, 'lng' => 0, 'isTest' => (int) auth()->user()->user_type === 1 ? 1 : null]);
-                $this->salvaOperatori($cliente->id);
+            }
 
-                if ($dati['accesso'] === 'Y') {
-                    $this->creaAccount($cliente);
-                }
-            });
-        }
+            $this->salvaOperatori($cliente->id);
 
-        $this->modal = false;
+            if ($dati['accesso'] === 'Y') {
+                $nuovoAccount = $this->creaAccount($cliente);
+            }
+        });
+
+        $this->reset('modal', 'clienteId', 'tab');
+        session()->flash('esito', 'Cliente salvato.'.($nuovoAccount ? $this->inviaCredenziali($nuovoAccount) : ''));
     }
 
-    /** Come Yii (Clienti::addAccount): utente tipo 3 con password casuale, se non esiste già. */
-    private function creaAccount(Cliente $cliente): void
+    /**
+     * Come Yii (Clienti::addAccount): utente tipo 3 con password casuale, solo se non esiste già.
+     *
+     * @return array{0: Admin, 1: string}|null account creato e password in chiaro da comunicare
+     */
+    private function creaAccount(Cliente $cliente): ?array
     {
         if (Admin::where('id_cliente', $cliente->id)->exists()) {
-            return;
+            return null;
         }
 
-        Admin::create([
+        $password = Str::password(8, symbols: false);
+        $admin = Admin::create([
             'user' => $cliente->email, 'nome' => $cliente->nome, 'cognome' => $cliente->cognome,
             'email' => $cliente->email, 'cellulare' => $cliente->telefono,
-            'password' => Str::password(8, symbols: false), 'user_type' => 3, 'attivo' => 'Y', 'id_cliente' => $cliente->id,
+            'password' => $password, 'user_type' => 3, 'attivo' => 'Y', 'id_cliente' => $cliente->id,
         ]);
+
+        return [$admin, $password];
+    }
+
+    /** Come Yii (sendEmailAccessi). Ritorna il testo da aggiungere al messaggio di esito. */
+    private function inviaCredenziali(array $account): string
+    {
+        [$admin, $password] = $account;
+
+        try {
+            Mail::to($admin->email, trim($admin->nome.' '.$admin->cognome) ?: null)->send(new NotificaHtml(
+                'Area Riservata',
+                view('emails.credenziali-accesso', ['nome' => trim($admin->nome.' '.$admin->cognome), 'utente' => $admin->user, 'password' => $password])->render(),
+                ['etichetta' => 'Accedi all\'area riservata', 'url' => route('login')],
+            ));
+        } catch (\Throwable $e) {
+            report($e);
+
+            return " Account creato, ma l'email con le credenziali non è stata inviata: usa «Password dimenticata?» dal login per generarne una nuova.";
+        }
+
+        return " Credenziali inviate a {$admin->email}.";
     }
 
     /** Come Yii (Clienti::removeRelated). */

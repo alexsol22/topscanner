@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/login', Livewire\Login::class)->name('login')->middleware('guest');
+Route::get('/recupera-password', Livewire\RecuperaPassword::class)->name('password.recupero')->middleware('guest');
 
 Route::post('/logout', function () {
     Auth::logout();

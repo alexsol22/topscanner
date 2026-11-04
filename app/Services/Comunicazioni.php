@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Mail\NotificaHtml;
-use App\Models\Legacy\Config;
 use App\Models\Legacy\Email;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
@@ -69,12 +68,12 @@ class Comunicazioni
      */
     public function invia(array $destinatari, string $oggetto, string $messaggio, int $idOperatore = 0): int
     {
-        $html = $this->applicaTemplate($oggetto, $messaggio);
+        $html = NotificaHtml::renderizza($oggetto, $messaggio);
         $inviate = 0;
 
         foreach ($destinatari as $indirizzo => $nome) {
             try {
-                Mail::to($indirizzo, $nome ?: null)->send(new NotificaHtml($oggetto, $html));
+                Mail::to($indirizzo, $nome ?: null)->send(new NotificaHtml($oggetto, $messaggio));
             } catch (Throwable $e) {
                 Log::error("Invio email a {$indirizzo} fallito: {$e->getMessage()}");
 
@@ -92,21 +91,5 @@ class Comunicazioni
         }
 
         return $inviate;
-    }
-
-    private function applicaTemplate(string $oggetto, string $messaggio): string
-    {
-        $config = Config::first();
-        $app = $config?->app ?? config('app.name');
-
-        return strtr((string) $config?->template, [
-            '[OGGETTO]' => $oggetto,
-            '[MESSAGGIO]' => $messaggio,
-            '[LOGO]' => asset('brand/logo-security-scanner.png'),
-            '[FIRMA]' => "Cordiali Saluti <br>Lo Staff {$app}",
-            '[EMAIL]' => (string) $config?->email,
-            '[DATE]' => now()->format('d-m-Y'),
-            '[COLORE]' => (string) $config?->colore_primario,
-        ]) ?: $messaggio;
     }
 }

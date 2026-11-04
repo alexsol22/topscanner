@@ -1,4 +1,8 @@
-<div class="space-y-5">
+<div class="space-y-5" x-on:scorri-al-primo-errore.window="$nextTick(() => document.querySelector('.text-rose-600')?.scrollIntoView({ behavior: 'smooth', block: 'center' }))">
+    @if (session('esito'))
+        <div class="rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 ring-1 ring-emerald-100">{{ session('esito') }}</div>
+    @endif
+
     @if (! $modal)
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div class="flex flex-col gap-2 sm:flex-row sm:flex-1">
@@ -10,7 +14,7 @@
         <div class="card overflow-hidden">
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-sky-100">
-                    <thead class="bg-sky-50/60"><tr><th class="th">Ragione Sociale</th><th class="th">Iva / Codice Fiscale</th><th class="th">Referente</th><th class="th">Email</th><th class="th">Telefono</th><th class="th text-right">Azioni</th></tr></thead>
+                    <thead class="bg-sky-50/60"><tr><th class="th">Ragione Sociale</th><th class="th">Iva / Codice Fiscale</th><th class="th">Referente</th><th class="th">Email</th><th class="th">Telefono</th><th class="th text-center">Sedi</th><th class="th text-right">Azioni</th></tr></thead>
                     <tbody class="divide-y divide-sky-50">
                         @forelse ($clienti as $c)
                             <tr wire:key="c{{ $c->id }}" class="hover:bg-sky-50/40">
@@ -19,13 +23,19 @@
                                 <td class="td">{{ trim($c->nome.' '.$c->cognome) }}</td>
                                 <td class="td">{{ $c->email }}</td>
                                 <td class="td">{{ $c->telefono }}</td>
+                                <td class="td text-center">
+                                    <a href="{{ route('sedi', ['cliente' => $c->id]) }}" wire:navigate title="Vai alle sedi di {{ $c->ragione_sociale }}" @class(['inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-sm font-semibold transition', 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' => $c->sedi_count > 0, 'bg-rose-50 text-rose-600 hover:bg-rose-100' => $c->sedi_count === 0])>
+                                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0zM15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                                        {{ $c->sedi_count }}
+                                    </a>
+                                </td>
                                 <td class="td whitespace-nowrap text-right">
                                     <button wire:click="modifica({{ $c->id }})" class="btn-soft !px-3 !py-1.5">Modifica</button>
                                     <button wire:click="elimina({{ $c->id }})" wire:confirm="Eliminare il cliente e tutti i suoi dati?" class="btn-danger !px-3 !py-1.5">Elimina</button>
                                 </td>
                             </tr>
                         @empty
-                            <tr><td colspan="6" class="td py-10 text-center text-slate-500">Nessun cliente trovato.</td></tr>
+                            <tr><td colspan="7" class="td py-10 text-center text-slate-500">Nessun cliente trovato.</td></tr>
                         @endforelse
                     </tbody>
                 </table>
@@ -41,6 +51,12 @@
                 <button type="button" wire:click="$set('modal', false)" class="btn-soft">← Torna all'elenco</button>
             </div>
             <form wire:submit="salva">
+                @if ($errors->any())
+                    <div class="mb-4 rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-700 ring-1 ring-rose-100" role="alert">
+                        <p class="font-semibold">Controlla i campi evidenziati prima di salvare:</p>
+                        <ul class="mt-1 list-inside list-disc">@foreach ($errors->all() as $errore)<li>{{ $errore }}</li>@endforeach</ul>
+                    </div>
+                @endif
                 <div class="mb-4 flex gap-1 overflow-x-auto rounded-2xl bg-sky-50 p-1.5">
                     @foreach (['dati' => 'Dati '.($f['ragione_sociale'] ?? ''), 'documenti' => 'Documenti', 'operatori' => 'Gestione operatori'] as $chiave => $etichetta)
                         <button type="button" wire:click="$set('tab', '{{ $chiave }}')" @disabled($chiave === 'documenti' && ! $clienteId)
@@ -49,7 +65,7 @@
                 </div>
 
                 <div @class(['grid gap-4 sm:grid-cols-2 lg:grid-cols-3', 'hidden' => $tab !== 'dati'])>
-                <x-ui.switch model="f.accesso" label="Accesso" class="sm:col-span-2" />
+                <x-ui.switch model="f.accesso" label="Abilita accesso" hint="Al salvataggio crea l'account di accesso del cliente (utente = email) e gli invia le credenziali via email. Se l'account esiste già non cambia nulla; disattivarlo non blocca un account già creato." class="sm:col-span-2" />
                 <x-ui.field label="Colore" name="f.colore"><div class="flex items-center gap-2"><input type="color" wire:model.live="f.colore" class="h-10 w-14 cursor-pointer rounded-lg border border-sky-100 bg-white p-1"><input wire:model.live.debounce.400ms="f.colore" class="input" maxlength="7"></div></x-ui.field>
                 <x-ui.field label="Ragione sociale *" name="f.ragione_sociale" class="sm:col-span-2 lg:col-span-3"><input wire:model="f.ragione_sociale" class="input"></x-ui.field>
                 <x-ui.field label="Nome referente" name="f.nome"><input wire:model="f.nome" class="input"></x-ui.field>

@@ -84,25 +84,48 @@
             </form>
 
             @if ($tab === 'formazioni' && $userId)
-                <div class="space-y-4">
-                    <ul class="divide-y divide-sky-100 rounded-2xl ring-1 ring-sky-100">
-                        @forelse ($formazioni as $d)
-                            <li wire:key="fo{{ $d->id }}" class="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
-                                <a href="{{ route('documenti.scarica', $d, false) }}" class="min-w-0 truncate font-medium text-sky-700 hover:underline">{{ $d->descrizione }} <span class="text-xs text-slate-400">{{ $d->inizio?->format('d/m/Y') }}{{ $d->fine ? ' → '.$d->fine->format('d/m/Y') : '' }}</span></a>
-                                <button type="button" wire:click="eliminaDocumento({{ $d->id }})" wire:confirm="Eliminare la formazione?" class="btn-danger !px-3 !py-1">Elimina</button>
-                            </li>
-                        @empty
-                            <li class="px-4 py-6 text-center text-sm text-slate-500">Nessuna formazione.</li>
-                        @endforelse
-                    </ul>
-                    <div class="grid gap-3 rounded-2xl bg-sky-50 p-4 sm:grid-cols-2 lg:grid-cols-4">
-                        <x-ui.field label="Data inizio" name="formazione.inizio"><input type="date" wire:model="formazione.inizio" class="input"></x-ui.field>
-                        <x-ui.field label="Data fine" name="formazione.fine"><input type="date" wire:model="formazione.fine" class="input"></x-ui.field>
-                        <x-ui.field label="Titolo / Descrizione" name="formazione.descrizione"><input wire:model="formazione.descrizione" class="input"></x-ui.field>
-                        <x-ui.field label="Allega file" name="fileFormazione"><input type="file" wire:model="fileFormazione" class="block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-sky-100 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-sky-700"></x-ui.field>
-                        <button type="button" wire:click="aggiungiFormazione" wire:loading.attr="disabled" wire:target="fileFormazione,aggiungiFormazione" class="btn-primary sm:col-span-2 lg:col-span-4">Aggiungi formazione</button>
-                    </div>
+                <div class="overflow-x-auto rounded-2xl ring-1 ring-sky-100">
+                    <table class="w-full min-w-[56rem] text-left text-sm">
+                        <thead class="bg-sky-50 text-xs font-semibold uppercase text-slate-500">
+                            <tr>
+                                <th class="px-3 py-2">Data inizio</th>
+                                <th class="px-3 py-2">Data fine</th>
+                                <th class="px-3 py-2">Titolo / Descrizione</th>
+                                <th class="px-3 py-2">File</th>
+                                <th class="px-3 py-2"></th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-sky-100">
+                            @foreach ($righeFormazioni as $id => $riga)
+                                <tr wire:key="fo{{ $id }}" class="align-top">
+                                    <td class="px-3 py-2"><input type="date" wire:model="righeFormazioni.{{ $id }}.inizio" class="input">@error("righeFormazioni.$id.inizio")<p class="mt-1 text-xs text-rose-600">{{ $message }}</p>@enderror</td>
+                                    <td class="px-3 py-2"><input type="date" wire:model="righeFormazioni.{{ $id }}.fine" class="input">@error("righeFormazioni.$id.fine")<p class="mt-1 text-xs text-rose-600">{{ $message }}</p>@enderror</td>
+                                    <td class="px-3 py-2"><input wire:model="righeFormazioni.{{ $id }}.descrizione" class="input">@error("righeFormazioni.$id.descrizione")<p class="mt-1 text-xs text-rose-600">{{ $message }}</p>@enderror</td>
+                                    <td class="px-3 py-2">
+                                        <a href="{{ route('documenti.scarica', $id, false) }}" class="block truncate text-sky-700 hover:underline">Scarica file attuale</a>
+                                        <input type="file" wire:model="fileRigheFormazioni.{{ $id }}" class="mt-1 block w-full text-xs file:mr-2 file:rounded-lg file:border-0 file:bg-sky-100 file:px-2 file:py-1 file:text-xs file:font-semibold file:text-sky-700" title="Scegli per sostituire il file">
+                                        @error("fileRigheFormazioni.$id")<p class="mt-1 text-xs text-rose-600">{{ $message }}</p>@enderror
+                                    </td>
+                                    <td class="whitespace-nowrap px-3 py-2 text-right">
+                                        <button type="button" wire:click="salvaFormazione({{ $id }})" wire:loading.attr="disabled" wire:target="fileRigheFormazioni.{{ $id }},salvaFormazione" class="btn-primary !px-3 !py-1">Salva</button>
+                                        <button type="button" wire:click="eliminaDocumento({{ $id }})" wire:confirm="Eliminare la formazione?" class="btn-danger !px-3 !py-1">Elimina</button>
+                                    </td>
+                                </tr>
+                            @endforeach
+                            <tr class="bg-sky-50/60 align-top">
+                                <td class="px-3 py-2"><input type="date" wire:model="formazione.inizio" class="input">@error('formazione.inizio')<p class="mt-1 text-xs text-rose-600">{{ $message }}</p>@enderror</td>
+                                <td class="px-3 py-2"><input type="date" wire:model="formazione.fine" class="input">@error('formazione.fine')<p class="mt-1 text-xs text-rose-600">{{ $message }}</p>@enderror</td>
+                                <td class="px-3 py-2"><input wire:model="formazione.descrizione" class="input" placeholder="Nuova formazione: titolo">@error('formazione.descrizione')<p class="mt-1 text-xs text-rose-600">{{ $message }}</p>@enderror</td>
+                                <td class="px-3 py-2">
+                                    <input type="file" wire:model="fileFormazione" class="block w-full text-xs file:mr-2 file:rounded-lg file:border-0 file:bg-sky-100 file:px-2 file:py-1 file:text-xs file:font-semibold file:text-sky-700">
+                                    @error('fileFormazione')<p class="mt-1 text-xs text-rose-600">{{ $message }}</p>@enderror
+                                </td>
+                                <td class="px-3 py-2 text-right"><button type="button" wire:click="aggiungiFormazione" wire:loading.attr="disabled" wire:target="fileFormazione,aggiungiFormazione" class="btn-primary !px-3 !py-1">Aggiungi</button></td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
+                <p class="mt-2 text-xs text-slate-500">Modifica i campi nella riga e premi Salva. Per sostituire il file, sceglilo nella riga prima di salvare.</p>
             @endif
 
             @if ($tab === 'attestati' && $userId)
@@ -142,29 +165,70 @@
             @endif
 
             @if ($tab === 'materiali' && $userId)
-                <div class="space-y-4">
-                    <ul class="divide-y divide-sky-100 rounded-2xl ring-1 ring-sky-100">
-                        @forelse ($materiali as $m)
-                            <li wire:key="ma{{ $m->id }}" class="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 text-sm">
-                                <div class="min-w-0"><span class="font-medium text-slate-800">{{ $m->tipo?->nome }}</span> <span class="text-slate-500">{{ $m->descrizione }} {{ $m->taglia ? '· taglia '.$m->taglia : '' }} {{ $m->riconsegna ? '· riconsegna '.$m->riconsegna->format('d/m/Y') : '' }}</span></div>
-                                <div class="flex items-center gap-2">
-                                    <button type="button" wire:click="consegnaMateriale({{ $m->id }})" class="rounded-full px-3 py-1 text-xs font-bold {{ $m->consegnato ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500' }}">{{ $m->consegnato ? 'Consegnato' : 'Non consegnato' }}</button>
-                                    <button type="button" wire:click="eliminaMateriale({{ $m->id }})" wire:confirm="Eliminare il materiale?" class="btn-danger !px-3 !py-1">Elimina</button>
-                                </div>
-                            </li>
-                        @empty
-                            <li class="px-4 py-6 text-center text-sm text-slate-500">Nessun materiale.</li>
-                        @endforelse
-                    </ul>
-                    <div class="grid gap-3 rounded-2xl bg-sky-50 p-4 sm:grid-cols-2 lg:grid-cols-4">
-                        <x-ui.field label="Materiale / abbigliamento" name="materiale.id_materiale"><x-ui.select-search wire:key="tipo-materiale" model="materiale.id_materiale" :options="$tipiMateriale->map(fn ($t) => ['id' => (string) $t->id, 'nome' => $t->nome])->values()" placeholder="Scegli materiale" /></x-ui.field>
-                        <x-ui.field label="Descrizione" name="materiale.descrizione"><input wire:model="materiale.descrizione" class="input"></x-ui.field>
-                        <x-ui.field label="Taglia" name="materiale.taglia"><input wire:model="materiale.taglia" class="input"></x-ui.field>
-                        <x-ui.field label="Riconsegna" name="materiale.riconsegna"><input type="date" wire:model="materiale.riconsegna" class="input"></x-ui.field>
-                        <x-ui.switch model="materiale.consegnato" label="Consegnato" class="sm:col-span-2 lg:col-span-4" />
-                        <button type="button" wire:click="aggiungiMateriale" class="btn-primary sm:col-span-2 lg:col-span-4">Aggiungi materiale</button>
-                    </div>
+                @php($opzioni = $tipiMateriale->map(fn ($t) => ['id' => (string) $t->id, 'nome' => $t->nome]))
+                <div class="overflow-x-auto rounded-2xl ring-1 ring-sky-100">
+                    <table class="w-full min-w-[56rem] text-left text-sm">
+                        <thead class="bg-sky-50 text-xs font-semibold uppercase text-slate-500">
+                            <tr>
+                                <th class="px-3 py-2">Materiale / abbigliamento</th>
+                                <th class="px-3 py-2">Descrizione</th>
+                                <th class="px-3 py-2">Taglia</th>
+                                <th class="px-3 py-2">Riconsegna</th>
+                                <th class="px-3 py-2 text-center">Consegnato</th>
+                                <th class="px-3 py-2"></th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-sky-100">
+                            @foreach ($righeMateriali as $id => $riga)
+                                @php($inScadenza = $riga['riconsegna'] !== '' && ! $riga['consegnato'] && \Illuminate\Support\Carbon::parse($riga['riconsegna'])->lte($limitePromemoria))
+                                <tr wire:key="ma{{ $id }}" class="align-top">
+                                    <td class="px-3 py-2">
+                                        <select wire:model="righeMateriali.{{ $id }}.id_materiale" class="input">
+                                            @foreach ($opzioni as $o)<option value="{{ $o['id'] }}">{{ $o['nome'] }}</option>@endforeach
+                                        </select>
+                                        @error("righeMateriali.$id.id_materiale")<p class="mt-1 text-xs text-rose-600">{{ $message }}</p>@enderror
+                                    </td>
+                                    <td class="px-3 py-2"><input wire:model="righeMateriali.{{ $id }}.descrizione" class="input"></td>
+                                    <td class="px-3 py-2"><input wire:model="righeMateriali.{{ $id }}.taglia" class="input"></td>
+                                    <td class="px-3 py-2">
+                                        <input type="date" wire:model="righeMateriali.{{ $id }}.riconsegna" class="input">
+                                        @error("righeMateriali.$id.riconsegna")<p class="mt-1 text-xs text-rose-600">{{ $message }}</p>@enderror
+                                        @if ($inScadenza)
+                                            @if (\Illuminate\Support\Carbon::parse($riga['riconsegna'])->lt(today()))
+                                                <span class="mt-1 inline-block rounded-full bg-rose-100 px-2 py-0.5 text-xs font-bold text-rose-700" title="Riconsegna scaduta e materiale non consegnato: rientra nel promemoria automatico agli amministratori.">Scaduto</span>
+                                            @else
+                                                <span class="mt-1 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-700" title="Riconsegna in scadenza e materiale non consegnato: rientra nel promemoria automatico agli amministratori.">In scadenza</span>
+                                            @endif
+                                        @endif
+                                    </td>
+                                    <td class="px-3 py-2 text-center"><input type="checkbox" wire:model="righeMateriali.{{ $id }}.consegnato" class="size-5 rounded border-slate-300 accent-emerald-500" title="Consegnato all'operatore"></td>
+                                    <td class="whitespace-nowrap px-3 py-2 text-right">
+                                        <button type="button" wire:click="salvaMateriale({{ $id }})" class="btn-primary !px-3 !py-1">Salva</button>
+                                        <button type="button" wire:click="eliminaMateriale({{ $id }})" wire:confirm="Eliminare il materiale?" class="btn-danger !px-3 !py-1">Elimina</button>
+                                    </td>
+                                </tr>
+                            @endforeach
+                            <tr class="bg-sky-50/60 align-top">
+                                <td class="px-3 py-2">
+                                    <select wire:model="materiale.id_materiale" class="input">
+                                        <option value="">Nuovo: scegli materiale</option>
+                                        @foreach ($opzioni as $o)<option value="{{ $o['id'] }}">{{ $o['nome'] }}</option>@endforeach
+                                    </select>
+                                    @error('materiale.id_materiale')<p class="mt-1 text-xs text-rose-600">{{ $message }}</p>@enderror
+                                </td>
+                                <td class="px-3 py-2"><input wire:model="materiale.descrizione" class="input" placeholder="Descrizione"></td>
+                                <td class="px-3 py-2"><input wire:model="materiale.taglia" class="input" placeholder="Taglia"></td>
+                                <td class="px-3 py-2">
+                                    <input type="date" wire:model="materiale.riconsegna" class="input">
+                                    @error('materiale.riconsegna')<p class="mt-1 text-xs text-rose-600">{{ $message }}</p>@enderror
+                                </td>
+                                <td class="px-3 py-2 text-center"><input type="checkbox" wire:model="materiale.consegnato" class="size-5 rounded border-slate-300 accent-emerald-500" title="Consegnato all'operatore"></td>
+                                <td class="px-3 py-2 text-right"><button type="button" wire:click="aggiungiMateriale" class="btn-primary !px-3 !py-1">Aggiungi</button></td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
+                <p class="mt-2 text-xs text-slate-500">Modifica i campi direttamente nella riga e premi Salva. Con data di riconsegna e materiale non consegnato, gli amministratori ricevono il promemoria automatico.</p>
             @endif
         </div>
     @endif
