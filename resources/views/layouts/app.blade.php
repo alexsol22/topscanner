@@ -5,6 +5,7 @@
         'Amministrazione' => [
             ['dashboard', 'Dashboard', 'M3 3v7h7V3H3zm11 0v7h7V3h-7zM3 14v7h7v-7H3zm11 0v7h7v-7h-7z', ['super_admin', 'admin']],
             ['amministratori', 'Amministratori', 'M16 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2m16 0v-2a4 4 0 00-3-3.87M12 7a4 4 0 11-8 0 4 4 0 018 0zm8 4a4 4 0 00-3-3.87', ['super_admin', 'admin']],
+            ['accessi', 'Log accessi', 'M12 8v4l3 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z', ['super_admin', 'admin']],
         ],
         'Anagrafica' => [
             ['clienti', 'Clienti', 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5m14 0h2M5 21H3M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5', ['super_admin', 'admin']],
@@ -28,6 +29,7 @@
     $paroleChiaveRicerca = [
         'dashboard' => 'dashboard panoramica riepilogo statistiche iniziale',
         'amministratori' => 'admin amministratori utenti account accessi',
+        'accessi' => 'log accessi login audit utenti',
         'clienti' => 'aziende anagrafica clienti',
         'sedi' => 'sedi filiali indirizzi posizioni',
         'operatori' => 'personale guardie dipendenti operatori',

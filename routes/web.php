@@ -60,5 +60,6 @@ Route::middleware('auth')->group(function () {
 
     Route::middleware('ruolo:super_admin,admin')->group(function () {
         Route::get('/amministratori', Livewire\Amministratori::class)->name('amministratori');
+        Route::get('/accessi', Livewire\Accessi::class)->name('accessi');
     });
 });

@@ -61,6 +61,13 @@ class LegacyLoginTest extends TestCase
         $this->utente('2weifo');
 
         $this->assertTrue(Auth::attempt(['user' => 'mario', 'password' => '2weifo']));
+
+        $accesso = DB::table('_tracking')->sole();
+
+        $this->assertSame(1, (int) $accesso->id_user);
+        $this->assertSame('Accesso utente mario', $accesso->action);
+        $this->assertNotEmpty($accesso->data_view);
+        $this->assertNotEmpty($accesso->addr);
     }
 
     public function test_login_is_case_sensitive_and_rejects_wrong_password(): void

@@ -2,6 +2,7 @@
 
 namespace App\Models\Legacy;
 
+use App\Models\User;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Tracking extends LegacyModel
@@ -29,6 +30,6 @@ class Tracking extends LegacyModel
 
     public function utente(): BelongsTo
     {
-        return $this->belongsTo(Admin::class, 'id_user');
+        return $this->belongsTo(User::class, 'id_user');
     }
 }
