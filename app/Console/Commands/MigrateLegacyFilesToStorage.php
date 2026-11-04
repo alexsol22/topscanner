@@ -14,6 +14,7 @@ use SplFileInfo;
 #[Signature('app:migrate-legacy-files-to-storage
     {--documents-from= : Directory containing protected/documenti}
     {--avatars-from= : Directory containing images/avatar}
+    {--shard= : Process only one slice of the files, as N/M (e.g. 0/8), to run several processes in parallel}
     {--dry-run : List the files without copying them}')]
 #[Description('Copy Yii files to the configured private Laravel storage disk, preserving their paths')]
 class MigrateLegacyFilesToStorage extends Command
@@ -75,6 +76,10 @@ class MigrateLegacyFilesToStorage extends Command
             $relativePath = str_replace(DIRECTORY_SEPARATOR, '/', $relativePath);
             $target = $destination.'/'.$relativePath;
 
+            if (! $this->inShard($target)) {
+                continue;
+            }
+
             if ($disk->exists($target)) {
                 if ($this->sourceHash($file->getPathname()) !== $this->storageHash($target)) {
                     throw new RuntimeException("Destination file differs from source: {$target}");
@@ -106,6 +111,18 @@ class MigrateLegacyFilesToStorage extends Command
         $this->line("{$source}: {$counts['copied']} to copy, {$counts['unchanged']} already matching.");
 
         return $counts;
+    }
+
+    private function inShard(string $path): bool
+    {
+        $shard = $this->option('shard');
+        if (! $shard) {
+            return true;
+        }
+
+        [$index, $total] = array_map('intval', explode('/', $shard)) + [1 => 1];
+
+        return $total > 0 && crc32($path) % $total === $index;
     }
 
     private function sourceHash(string $path): string
