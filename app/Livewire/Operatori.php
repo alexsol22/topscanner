@@ -163,7 +163,7 @@ class Operatori extends Component
 
         if ($this->avatar) {
             $nome = 'avatar_'.$u->id.'.'.strtolower($this->avatar->getClientOriginalExtension());
-            Storage::disk(config('filesystems.files_disk'))->putFileAs(config('filesystems.private_paths.avatars'), $this->avatar, $nome);
+            $this->avatar->storeAs(config('filesystems.private_paths.avatars'), $nome, ['disk' => config('filesystems.files_disk')]);
             $u->update(['avatar' => $nome]);
         }
 
@@ -211,7 +211,7 @@ class Operatori extends Component
             $vecchioPercorso = $documento->percorso();
             $estensione = strtolower($file->getClientOriginalExtension());
             $documento->file = 'Formazione_'.$operatore->nome.'_'.$operatore->cognome.'-'.$operatore->id.'_'.time().'.'.$estensione;
-            $disco->putFileAs(dirname($documento->percorso()), $file, basename($documento->percorso()));
+            $file->storeAs(dirname($documento->percorso()), basename($documento->percorso()), ['disk' => config('filesystems.files_disk')]);
             $disco->delete($vecchioPercorso);
             $dati += ['file' => $documento->file, 'icona' => self::ICONE[$estensione] ?? 'file-alt'];
         }
@@ -255,7 +255,7 @@ class Operatori extends Component
         $documento = new Documento($dati + ['id_tipo' => $operatore->id, 'tipo' => 'O', 'admin' => 'N', 'icona' => self::ICONE[$estensione] ?? 'file-alt']);
         $documento->file = $prefisso.'_'.$operatore->nome.'_'.$operatore->cognome.'-'.$operatore->id.'_'.time().'.'.$estensione;
 
-        Storage::disk(config('filesystems.files_disk'))->putFileAs(dirname($documento->percorso()), $file, basename($documento->percorso()));
+        $file->storeAs(dirname($documento->percorso()), basename($documento->percorso()), ['disk' => config('filesystems.files_disk')]);
         $documento->save();
     }
 

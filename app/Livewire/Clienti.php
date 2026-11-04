@@ -153,7 +153,7 @@ class Clienti extends Component
         ]);
         $documento->file = 'Doc_'.$cliente->id.'_'.time().'.'.$estensione;
 
-        Storage::disk(config('filesystems.files_disk'))->putFileAs(dirname($documento->percorso()), $this->fileDocumento, basename($documento->percorso()));
+        $this->fileDocumento->storeAs(dirname($documento->percorso()), basename($documento->percorso()), ['disk' => config('filesystems.files_disk')]);
         $documento->save();
 
         $this->reset('titoloDocumento', 'fileDocumento');

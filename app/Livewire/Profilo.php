@@ -64,7 +64,7 @@ class Profilo extends Component
         if ($this->foto) {
             $this->eliminaFotoEsistente($user);
             $nome = 'avatar_'.$user->id.'.'.strtolower($this->foto->getClientOriginalExtension());
-            Storage::disk(config('filesystems.files_disk'))->putFileAs(config('filesystems.private_paths.avatars'), $this->foto, $nome);
+            $this->foto->storeAs(config('filesystems.private_paths.avatars'), $nome, ['disk' => config('filesystems.files_disk')]);
             $aggiornamenti['foto_path'] = $nome;
             $this->foto = null;
         }

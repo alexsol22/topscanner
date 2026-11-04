@@ -8,7 +8,6 @@ use App\Models\Legacy\Certificato;
 use App\Models\Legacy\Documento;
 use App\Models\Legacy\DocumentoView;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\Storage;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
@@ -98,7 +97,7 @@ class Documenti extends Component
         ]);
         $documento->file = ($cliente ? 'Doc_' : 'Documento_').$idTipo.'_'.time().'.'.$estensione;
 
-        Storage::disk(config('filesystems.files_disk'))->putFileAs(dirname($documento->percorso()), $this->file, basename($documento->percorso()));
+        $this->file->storeAs(dirname($documento->percorso()), basename($documento->percorso()), ['disk' => config('filesystems.files_disk')]);
         $documento->save();
 
         if (! $cliente) {

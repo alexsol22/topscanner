@@ -196,7 +196,7 @@ class SedeForm extends Component
         }
 
         $nome = 'Postazione-principale-'.$sede->id.'-'.time().'.'.strtolower($this->foto->getClientOriginalExtension());
-        Storage::disk(config('filesystems.files_disk'))->putFileAs($sede->cartella(), $this->foto, $nome);
+        $this->foto->storeAs($sede->cartella(), $nome, ['disk' => config('filesystems.files_disk')]);
         if ($sede->percorsoFoto()) {
             Storage::disk(config('filesystems.files_disk'))->delete($sede->percorsoFoto());
         }
@@ -229,7 +229,7 @@ class SedeForm extends Component
             if ($immagine = $this->immaginiPostazioni[$chiave] ?? null) {
                 $nome = 'Postazione-'.$postazione->id.'-'.time().'.'.strtolower($immagine->getClientOriginalExtension());
                 Storage::disk(config('filesystems.files_disk'))->deleteDirectory($postazione->cartella());
-                Storage::disk(config('filesystems.files_disk'))->putFileAs($postazione->cartella(), $immagine, $nome);
+                $immagine->storeAs($postazione->cartella(), $nome, ['disk' => config('filesystems.files_disk')]);
                 $postazione->update(['file' => $nome]);
             }
         }
