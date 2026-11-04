@@ -4,9 +4,10 @@ namespace App\Auth;
 
 use Illuminate\Auth\EloquentUserProvider;
 use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Support\Facades\Hash;
 
 /**
- * Login come Yii: colonna `user`, password confrontata in modo esatto (BINARY), solo attivo='Y'.
+ * Login come Yii: colonna `user`, solo attivo='Y'; password verificata contro l'hash (case-sensitive).
  */
 class LegacyUserProvider extends EloquentUserProvider
 {
@@ -27,10 +28,8 @@ class LegacyUserProvider extends EloquentUserProvider
         $stored = (string) $user->getAuthPassword();
         $plain = (string) ($credentials['password'] ?? '');
 
-        return $stored !== '' && $plain !== '' && hash_equals($stored, $plain);
+        return $stored !== '' && $plain !== '' && str_starts_with($stored, '$2y$') && Hash::check($plain, $stored);
     }
-
-    public function rehashPasswordIfRequired(Authenticatable $user, array $credentials, bool $force = false): void {}
 
     public function retrieveByToken($identifier, #[\SensitiveParameter] $token)
     {

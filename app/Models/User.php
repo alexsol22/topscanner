@@ -30,6 +30,7 @@ class User extends Authenticatable
     {
         return [
             'attivo' => YesNo::class,
+            'password' => 'hashed',
             'last_login' => 'datetime',
             'costo_orario' => 'float',
         ];

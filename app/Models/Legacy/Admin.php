@@ -17,6 +17,7 @@ class Admin extends LegacyModel
     {
         return [
             'attivo' => YesNo::class,
+            'password' => 'hashed',
             'last_login' => 'datetime',
             'costo_orario' => 'float',
         ];

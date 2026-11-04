@@ -4,6 +4,7 @@ namespace App\Livewire;
 
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
@@ -88,7 +89,7 @@ class Profilo extends Component
             'password' => 'required|string|min:6|max:40|confirmed|different:password_attuale',
         ], [], ['password_attuale' => 'password attuale', 'password' => 'nuova password']);
 
-        if (! hash_equals((string) $this->utente()->getRawOriginal('password'), $this->password_attuale)) {
+        if (! Hash::check($this->password_attuale, (string) $this->utente()->getRawOriginal('password'))) {
             $this->addError('password_attuale', 'La password attuale non è corretta.');
 
             return;
