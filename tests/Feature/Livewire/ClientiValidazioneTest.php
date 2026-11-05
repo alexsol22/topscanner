@@ -9,6 +9,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -90,6 +91,55 @@ class ClientiValidazioneTest extends TestCase
             $table->string('cellulare')->nullable();
             $table->string('password')->nullable();
         });
+    }
+
+    private function creaClienteDaEliminare(): int
+    {
+        $this->creaSchema();
+        foreach (['tc_turni', 'tc_postazioni', 'tc_turni_step'] as $tabella) {
+            Schema::create($tabella, function (Blueprint $table): void {
+                $table->increments('id');
+                $table->unsignedInteger('id_cliente')->nullable();
+            });
+        }
+        config(['filesystems.files_disk' => 'local']);
+        Storage::fake('local');
+
+        $id = DB::table('tc_clienti')->insertGetId(['ragione_sociale' => 'Alpha Srl']);
+        DB::table('tc_sedi')->insert(['id_cliente' => $id]);
+        Storage::disk('local')->put("protected/documenti/Cliente_{$id}/Sede_1/foto.jpg", 'x');
+
+        return $id;
+    }
+
+    public function test_delete_requires_exact_confirmation_text(): void
+    {
+        $id = $this->creaClienteDaEliminare();
+
+        Livewire::actingAs(new User(['user_type' => 2]))->test(Clienti::class)
+            ->call('richiediEliminazione', $id)
+            ->set('conferma', 'sbagliato')
+            ->call('elimina')
+            ->assertHasErrors(['conferma']);
+
+        $this->assertSame(1, DB::table('tc_clienti')->count());
+        Storage::disk('local')->assertExists("protected/documenti/Cliente_{$id}/Sede_1/foto.jpg");
+    }
+
+    public function test_confirmed_delete_removes_related_records_and_files(): void
+    {
+        $id = $this->creaClienteDaEliminare();
+
+        $componente = Livewire::actingAs(new User(['user_type' => 2]))->test(Clienti::class)
+            ->call('richiediEliminazione', $id);
+        $componente->set('conferma', 'Conferma')
+            ->call('elimina')
+            ->assertHasNoErrors()
+            ->assertSet('eliminaId', null);
+
+        $this->assertSame(0, DB::table('tc_clienti')->count());
+        $this->assertSame(0, DB::table('tc_sedi')->count());
+        Storage::disk('local')->assertMissing("protected/documenti/Cliente_{$id}/Sede_1/foto.jpg");
     }
 
     private function salvaCliente(bool $accesso = true): Testable

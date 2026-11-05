@@ -53,6 +53,41 @@ class OperatoriMaterialeTest extends TestCase
         $this->assertSame('S', DB::table('tc_materiali')->where('id', 2)->value('taglia'));
     }
 
+    public function test_delete_operator_requires_name_removes_related_data_and_blocks_with_shifts(): void
+    {
+        $this->creaSchema();
+        foreach (['tc_turni', 'tc_gda', 'tc_operatori_preferiti', 'tc_operatori_escludi', 'tc_documenti_view', 'tc_bacheca_view'] as $tabella) {
+            Schema::create($tabella, function (Blueprint $table): void {
+                $table->increments('id');
+                $table->unsignedInteger('id_operatore')->nullable();
+            });
+        }
+        $disco = config('filesystems.files_disk');
+        Storage::fake($disco);
+        DB::table('tc_materiali')->insert(['id' => 1, 'id_operatore' => 10, 'id_materiale' => 1, 'taglia' => 'M', 'consegnato' => 'N']);
+        DB::table('tc_documenti')->insert(['id' => 1, 'id_tipo' => 10, 'tipo' => 'O', 'formazione' => 'N', 'file' => 'a.pdf']);
+        Storage::disk($disco)->put((new Documento(['id_tipo' => 10, 'tipo' => 'O', 'file' => 'a.pdf']))->percorso(), 'x');
+
+        $componente = Livewire::actingAs(new User(['user_type' => 2]))->test(Operatori::class)
+            ->call('richiediEliminazione', 10)
+            ->set('conferma', 'XXXXX')
+            ->call('elimina')
+            ->assertHasErrors(['conferma']);
+        $this->assertNotNull(DB::table('tc_admin')->find(10));
+
+        DB::table('tc_turni')->insert(['id_operatore' => 10]);
+        $componente->set('conferma', 'conferma')->call('elimina')->assertHasErrors(['conferma']);
+        $this->assertNotNull(DB::table('tc_admin')->find(10));
+
+        DB::table('tc_turni')->delete();
+        $componente->set('conferma', 'conferma')->call('elimina')->assertHasNoErrors();
+
+        $this->assertNull(DB::table('tc_admin')->find(10));
+        $this->assertSame(0, DB::table('tc_materiali')->count());
+        $this->assertSame(0, DB::table('tc_documenti')->count());
+        Storage::disk($disco)->assertMissing((new Documento(['id_tipo' => 10, 'tipo' => 'O', 'file' => 'a.pdf']))->percorso());
+    }
+
     public function test_formazione_rows_are_edited_inline_with_optional_file_replacement(): void
     {
         $this->creaSchema();

@@ -12,6 +12,7 @@ use App\Models\Legacy\Provincia;
 use App\Models\Legacy\TipoMateriale;
 use App\Models\User;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -33,6 +34,10 @@ class Operatori extends Component
     private const ESTENSIONI = 'pdf,jpg,jpeg,png,doc,docx,xls,xlsx,mp4,zip';
 
     public string $cerca = '';
+
+    public ?int $eliminaId = null;
+
+    public string $conferma = '';
 
     #[Url(as: 'form')]
     public bool $editing = false;
@@ -65,6 +70,12 @@ class Operatori extends Component
     public ?int $userId = null;
 
     public array $f = [];
+
+    /** Difesa in profondità: ogni richiesta Livewire, non solo la rotta, richiede ruolo staff. */
+    public function boot(): void
+    {
+        abort_unless(auth()->user()?->isStaff(), 403);
+    }
 
     public function updatingCerca(): void
     {
@@ -355,6 +366,72 @@ class Operatori extends Component
         $u->update(['attivo' => ! $u->attivo]);
     }
 
+    public function richiediEliminazione(int $id): void
+    {
+        $utente = $this->query()->findOrFail($id);
+        abort_if($utente->id === auth()->id(), 403);
+        $this->reset('conferma');
+        $this->resetErrorBag();
+        $this->eliminaId = $id;
+    }
+
+    private function confermaValida(string $atteso): bool
+    {
+        $normalizza = fn (string $v): string => mb_strtolower(trim(preg_replace('/\s+/u', ' ', $v)));
+
+        return $normalizza($this->conferma) === $normalizza($atteso);
+    }
+
+    public function annullaEliminazione(): void
+    {
+        $this->reset('eliminaId', 'conferma');
+        $this->resetErrorBag();
+    }
+
+    /** Come attivaDisattiva ma definitiva: rimuove anche i dati collegati e i file. */
+    public function elimina(): void
+    {
+        abort_unless($this->eliminaId, 404);
+        $utente = $this->query()->findOrFail($this->eliminaId);
+        abort_if($utente->id === auth()->id(), 403);
+
+        if (! $this->confermaValida('conferma')) {
+            $this->addError('conferma', 'Il testo non coincide: eliminazione non eseguita.');
+
+            return;
+        }
+
+        if ($this->storicoTurni($utente->id) > 0) {
+            $this->addError('conferma', 'Questo utente ha turni registrati: non può essere eliminato. Disattivalo.');
+
+            return;
+        }
+
+        // Niente transazione: tabelle legacy MyISAM e GTID.
+        $db = DB::connection('mysql');
+        $db->table('tc_documenti')->where('id_tipo', $utente->id)->where('tipo', 'O')->delete();
+        foreach (['tc_materiali', 'tc_operatori_preferiti', 'tc_operatori_escludi', 'tc_documenti_view', 'tc_bacheca_view'] as $tabella) {
+            $db->table($tabella)->where('id_operatore', $utente->id)->delete();
+        }
+
+        $disco = Storage::disk(config('filesystems.files_disk'));
+        $disco->deleteDirectory(trim(config('filesystems.private_paths.documenti'), '/').'/Operatore_'.$utente->id);
+        if ($utente->foto_path) {
+            $disco->delete(trim(config('filesystems.private_paths.avatars'), '/').'/'.basename($utente->foto_path));
+        }
+
+        $utente->delete();
+
+        $this->annullaEliminazione();
+        session()->flash('esito', "Utente {$utente->nome_completo} eliminato.");
+    }
+
+    private function storicoTurni(int $id): int
+    {
+        return DB::connection('mysql')->table('tc_turni')->where('id_operatore', $id)->count()
+            + DB::connection('mysql')->table('tc_gda')->where('id_operatore', $id)->count();
+    }
+
     /** Solo il super admin può creare/modificare amministratori. */
     private function autorizzaRuolo(string $ruolo): void
     {
@@ -368,6 +445,13 @@ class Operatori extends Component
 
     public function render()
     {
+        $daEliminare = $this->eliminaId ? $this->query()->find($this->eliminaId) : null;
+        $riepilogo = $daEliminare ? [
+            'documenti' => DB::connection('mysql')->table('tc_documenti')->where('id_tipo', $daEliminare->id)->where('tipo', 'O')->count(),
+            'materiali' => DB::connection('mysql')->table('tc_materiali')->where('id_operatore', $daEliminare->id)->count(),
+            'turni' => $this->storicoTurni($daEliminare->id),
+        ] : [];
+
         $utenti = $this->query()->with('cliente')
             ->when($this->cerca, fn ($q) => $q->where(fn ($w) => $w->where('nome', 'like', "%{$this->cerca}%")->orWhere('cognome', 'like', "%{$this->cerca}%")->orWhere('email', 'like', "%{$this->cerca}%")))
             ->orderBy('cognome')->orderBy('nome')->paginate(10);
@@ -376,6 +460,8 @@ class Operatori extends Component
 
         return view('livewire.operatori', [
             'utenti' => $utenti,
+            'daEliminare' => $daEliminare,
+            'riepilogo' => $riepilogo,
             'province' => Provincia::orderBy('nome')->get(['id', 'nome', 'sigla']),
             'attestati' => $conSezioni ? Documento::with('certificato')->where('tipo', 'O')->where('id_tipo', $this->userId)->where('formazione', 'N')->orderByDesc('id')->get() : collect(),
             'limitePromemoria' => today()->addDays((int) Messaggio::find(5)?->giorni),

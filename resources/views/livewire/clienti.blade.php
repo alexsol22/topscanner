@@ -3,6 +3,21 @@
         <div class="rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 ring-1 ring-emerald-100">{{ session('esito') }}</div>
     @endif
 
+    @if ($daEliminare)
+        <x-ui.conferma-eliminazione :title="'Eliminare '.$daEliminare->ragione_sociale.'?'" atteso="conferma">
+            <p>Verranno eliminati <strong>definitivamente</strong> il cliente e tutti i dati collegati:</p>
+            <ul class="list-disc space-y-0.5 pl-5">
+                <li>{{ $riepilogo['sedi'] }} sedi e {{ $riepilogo['postazioni'] }} postazioni</li>
+                <li>{{ $riepilogo['turni'] }} turni con i relativi passaggi</li>
+                <li>{{ $riepilogo['documenti'] }} documenti del cliente</li>
+                <li>{{ $riepilogo['account'] }} account di accesso al portale (non potranno più entrare)</li>
+                <li>Operatori preferiti ed esclusi</li>
+                <li>Tutti i file caricati (documenti, foto di sedi e postazioni)</li>
+            </ul>
+            <p>Gli operatori non vengono eliminati.</p>
+        </x-ui.conferma-eliminazione>
+    @endif
+
     @if (! $modal)
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div class="flex flex-col gap-2 sm:flex-row sm:flex-1">
@@ -31,7 +46,7 @@
                                 </td>
                                 <td class="td whitespace-nowrap text-right">
                                     <button wire:click="modifica({{ $c->id }})" class="btn-soft !px-3 !py-1.5">Modifica</button>
-                                    <button wire:click="elimina({{ $c->id }})" wire:confirm="Eliminare il cliente e tutti i suoi dati?" class="btn-danger !px-3 !py-1.5">Elimina</button>
+                                    <button wire:click="richiediEliminazione({{ $c->id }})" class="btn-danger !px-3 !py-1.5">Elimina</button>
                                 </td>
                             </tr>
                         @empty

@@ -1,4 +1,25 @@
 <div class="space-y-5">
+    @if (session('esito'))
+        <div class="rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 ring-1 ring-emerald-100">{{ session('esito') }}</div>
+    @endif
+
+    @if ($daEliminare)
+        <x-ui.conferma-eliminazione :title="'Eliminare '.$daEliminare->nome_completo.'?'" atteso="conferma">
+            @if ($riepilogo['turni'] > 0)
+                <p class="rounded-xl bg-amber-50 p-3 font-medium text-amber-800 ring-1 ring-amber-100">Questo utente ha {{ $riepilogo['turni'] }} turni/registrazioni nello storico: l'eliminazione verrà bloccata. Usa «Disattiva» per impedirgli l'accesso mantenendo lo storico.</p>
+            @endif
+            <p>Verranno eliminati <strong>definitivamente</strong>:</p>
+            <ul class="list-disc space-y-0.5 pl-5">
+                <li>L'account di accesso (non potrà più entrare)</li>
+                <li>{{ $riepilogo['documenti'] }} documenti, attestati e formazioni, con i file caricati</li>
+                <li>{{ $riepilogo['materiali'] }} materiali assegnati</li>
+                <li>Preferenze ed esclusioni nei clienti, avvisi e documenti letti</li>
+                <li>Foto profilo</li>
+            </ul>
+            <p>Se vuoi solo impedire l'accesso, usa «Disattiva».</p>
+        </x-ui.conferma-eliminazione>
+    @endif
+
     @if (! $editing)
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div class="flex flex-1 gap-2">
@@ -20,7 +41,8 @@
                             <td class="td whitespace-nowrap text-right">
                                 <button wire:click="modifica({{ $u->id }})" class="btn-soft !px-3 !py-1.5">Modifica</button>
                                 @if ($u->id !== auth()->id())
-                                    <button wire:click="attivaDisattiva({{ $u->id }})" class="btn-danger !px-3 !py-1.5">{{ $u->attivo ? 'Disattiva' : 'Attiva' }}</button>
+                                    <button wire:click="attivaDisattiva({{ $u->id }})" class="btn-soft !px-3 !py-1.5">{{ $u->attivo ? 'Disattiva' : 'Attiva' }}</button>
+                                    <button wire:click="richiediEliminazione({{ $u->id }})" class="btn-danger !px-3 !py-1.5">Elimina</button>
                                 @endif
                             </td>
                         </tr>

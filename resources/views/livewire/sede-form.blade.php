@@ -29,7 +29,7 @@
                 <x-ui.field label="Distanza massima scansione" name="f.distanza_max">
                     <div class="relative"><input type="number" wire:model.live.debounce.400ms="f.distanza_max" class="input !pr-10"><span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-slate-400">m</span></div>
                 </x-ui.field>
-                <x-ui.field label="Cliente *" name="f.cliente_id"><select wire:model="f.cliente_id" class="input"><option value="">—</option>@foreach ($clienti as $c)<option value="{{ $c->id }}">{{ $c->ragione_sociale }}</option>@endforeach</select></x-ui.field>
+                <x-ui.field label="Cliente *" name="f.cliente_id"><select wire:model="f.cliente_id" class="input" @disabled($sedeId)><option value="">—</option>@foreach ($clienti as $c)<option value="{{ $c->id }}">{{ $c->ragione_sociale }}</option>@endforeach</select></x-ui.field>
                 <div class="grid grid-cols-[1fr_auto] items-start gap-3">
                     <x-ui.field label="Denominazione *" name="f.descrizione"><input wire:model="f.descrizione" class="input"></x-ui.field>
                     <x-ui.field label="Colore" name="f.colore"><input type="color" wire:model.live="f.colore" class="h-10 w-14 cursor-pointer rounded-lg border border-sky-100 bg-white p-1"></x-ui.field>

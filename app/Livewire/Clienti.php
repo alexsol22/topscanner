@@ -51,6 +51,10 @@ class Clienti extends Component
     /** @var array<int, int|string> */
     public array $escludi = [];
 
+    public ?int $eliminaId = null;
+
+    public string $conferma = '';
+
     public string $titoloDocumento = '';
 
     public $fileDocumento;
@@ -78,6 +82,12 @@ class Clienti extends Component
             'f.telefono' => [...$telefono, 'max:16'],
             'f.fax' => [...$telefono, 'max:15'],
         ];
+    }
+
+    /** Difesa in profondità: ogni richiesta Livewire, non solo la rotta, richiede ruolo staff. */
+    public function boot(): void
+    {
+        abort_unless(auth()->user()?->isStaff(), 403);
     }
 
     public function updatingCerca(): void
@@ -198,20 +208,19 @@ class Clienti extends Component
 
         $nuovoAccount = null;
 
-        DB::connection('mysql')->transaction(function () use ($dati, &$nuovoAccount) {
-            if ($this->clienteId) {
-                $cliente = $this->clientiVisibili()->findOrFail($this->clienteId);
-                $cliente->update($dati);
-            } else {
-                $cliente = Cliente::create($dati + ['pos' => '', 'lat' => 0, 'lng' => 0, 'isTest' => (int) auth()->user()->user_type === 1 ? 1 : null]);
-            }
+        // Niente transazione: le tabelle legacy sono MyISAM e GTID vieta di mischiarle con tabelle transazionali.
+        if ($this->clienteId) {
+            $cliente = $this->clientiVisibili()->findOrFail($this->clienteId);
+            $cliente->update($dati);
+        } else {
+            $cliente = Cliente::create($dati + ['pos' => '', 'lat' => 0, 'lng' => 0, 'isTest' => (int) auth()->user()->user_type === 1 ? 1 : null]);
+        }
 
-            $this->salvaOperatori($cliente->id);
+        $this->salvaOperatori($cliente->id);
 
-            if ($dati['accesso'] === 'Y') {
-                $nuovoAccount = $this->creaAccount($cliente);
-            }
-        });
+        if ($dati['accesso'] === 'Y') {
+            $nuovoAccount = $this->creaAccount($cliente);
+        }
 
         $this->reset('modal', 'clienteId', 'tab');
         session()->flash('esito', 'Cliente salvato.'.($nuovoAccount ? $this->inviaCredenziali($nuovoAccount) : ''));
@@ -259,20 +268,67 @@ class Clienti extends Component
     }
 
     /** Come Yii (Clienti::removeRelated). */
-    public function elimina(int $id): void
+    public function richiediEliminazione(int $id): void
     {
         $this->soloStaff();
-        $cliente = $this->clientiVisibili()->findOrFail($id);
+        $this->clientiVisibili()->findOrFail($id);
+        $this->reset('conferma');
+        $this->resetErrorBag();
+        $this->eliminaId = $id;
+    }
 
-        DB::connection('mysql')->transaction(function () use ($cliente) {
-            DB::connection('mysql')->table('tc_documenti')->where('id_tipo', $cliente->id)->where('tipo', 'C')->delete();
+    private function confermaValida(string $atteso): bool
+    {
+        $normalizza = fn (string $v): string => mb_strtolower(trim(preg_replace('/\s+/u', ' ', $v)));
 
-            foreach (['tc_turni', 'tc_sedi', 'tc_postazioni', 'tc_turni_step', 'tc_admin', 'tc_operatori_preferiti', 'tc_operatori_escludi'] as $tabella) {
-                DB::connection('mysql')->table($tabella)->where('id_cliente', $cliente->id)->delete();
-            }
+        return $normalizza($this->conferma) === $normalizza($atteso);
+    }
 
-            $cliente->delete();
-        });
+    public function annullaEliminazione(): void
+    {
+        $this->reset('eliminaId', 'conferma');
+        $this->resetErrorBag();
+    }
+
+    public function elimina(): void
+    {
+        $this->soloStaff();
+        abort_unless($this->eliminaId, 404);
+        $cliente = $this->clientiVisibili()->findOrFail($this->eliminaId);
+
+        if (! $this->confermaValida('conferma')) {
+            $this->addError('conferma', 'Il testo non coincide: eliminazione non eseguita.');
+
+            return;
+        }
+
+        // Niente transazione: le tabelle legacy sono MyISAM e GTID vieta di mischiarle con tabelle transazionali.
+        DB::connection('mysql')->table('tc_documenti')->where('id_tipo', $cliente->id)->where('tipo', 'C')->delete();
+
+        foreach (['tc_turni', 'tc_sedi', 'tc_postazioni', 'tc_turni_step', 'tc_admin', 'tc_operatori_preferiti', 'tc_operatori_escludi'] as $tabella) {
+            DB::connection('mysql')->table($tabella)->where('id_cliente', $cliente->id)->delete();
+        }
+
+        $cliente->delete();
+
+        Storage::disk(config('filesystems.files_disk'))->deleteDirectory(trim(config('filesystems.private_paths.documenti'), '/').'/Cliente_'.$cliente->id);
+
+        $this->annullaEliminazione();
+        session()->flash('esito', "Cliente {$cliente->ragione_sociale} eliminato.");
+    }
+
+    /** @return array{sedi: int, turni: int, postazioni: int, documenti: int, account: int} */
+    private function riepilogoEliminazione(): array
+    {
+        $db = DB::connection('mysql');
+
+        return [
+            'sedi' => $db->table('tc_sedi')->where('id_cliente', $this->eliminaId)->count(),
+            'turni' => $db->table('tc_turni')->where('id_cliente', $this->eliminaId)->count(),
+            'postazioni' => $db->table('tc_postazioni')->where('id_cliente', $this->eliminaId)->count(),
+            'documenti' => $db->table('tc_documenti')->where('id_tipo', $this->eliminaId)->where('tipo', 'C')->count(),
+            'account' => $db->table('tc_admin')->where('id_cliente', $this->eliminaId)->count(),
+        ];
     }
 
     public function render()
@@ -281,7 +337,11 @@ class Clienti extends Component
             ->when($this->cerca, fn ($q) => $q->where(fn ($w) => $w->where('ragione_sociale', 'like', "%{$this->cerca}%")->orWhereHas('comune', fn ($c) => $c->where('comune', 'like', "%{$this->cerca}%"))))
             ->orderBy('ragione_sociale')->paginate(10);
 
+        $daEliminare = $this->eliminaId ? $this->clientiVisibili()->find($this->eliminaId) : null;
+
         return view('livewire.clienti', [
+            'daEliminare' => $daEliminare,
+            'riepilogo' => $daEliminare ? $this->riepilogoEliminazione() : [],
             'clienti' => $clienti,
             'province' => Provincia::orderBy('nome')->get(['id', 'nome', 'sigla']),
             'operatori' => $this->modal ? Admin::where('user_type', 4)->where('attivo', 'Y')->orderBy('cognome')->orderBy('nome')->get(['id', 'nome', 'cognome']) : collect(),

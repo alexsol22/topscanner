@@ -21,6 +21,20 @@ class Tracking extends LegacyModel
         });
     }
 
+    /** Equivale a MyUtils::setTracking di Yii. */
+    public static function registra(string $azione): void
+    {
+        static::create([
+            'id_user' => auth()->id(),
+            'addr' => (string) request()->ip(),
+            'host' => '',
+            'agent' => substr((string) request()->userAgent(), 0, 255),
+            'pagina' => '',
+            'data_view' => now()->format('Y-m-d H:i'),
+            'action' => $azione,
+        ]);
+    }
+
     protected function casts(): array
     {
         return [

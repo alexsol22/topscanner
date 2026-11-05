@@ -1,4 +1,25 @@
 <div class="space-y-5">
+    @if (session('esito'))
+        <div class="rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 ring-1 ring-emerald-100">{{ session('esito') }}</div>
+    @endif
+    @if (session('avviso'))
+        <div class="rounded-xl bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800 ring-1 ring-amber-100">{{ session('avviso') }}</div>
+    @endif
+
+    @if ($daEliminare)
+        <x-ui.conferma-eliminazione :title="'Eliminare '.$daEliminare->descrizione.'?'" atteso="conferma">
+            <p>Verranno eliminati <strong>definitivamente</strong>:</p>
+            <ul class="list-disc space-y-0.5 pl-5">
+                <li>La sede e i suoi documenti</li>
+                <li>{{ $riepilogo['turni'] }} turni (con i relativi step)</li>
+                <li>{{ $riepilogo['postazioni'] }} postazioni, con foto e file caricati</li>
+                <li>La cartella della sede; i codici QR tornano disponibili</li>
+            </ul>
+            @if ($riepilogo['presenze'] > 0)
+                <p class="rounded-xl bg-amber-50 p-3 font-medium text-amber-800 ring-1 ring-amber-100">Sono presenti {{ $riepilogo['presenze'] }} registrazioni di presenza (GDA): resteranno nello storico ma non saranno più collegate a una sede.</p>
+            @endif
+        </x-ui.conferma-eliminazione>
+    @endif
     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div class="flex flex-1 flex-col gap-2 sm:flex-row">
             <input type="search" wire:model.live.debounce.300ms="cerca" placeholder="Cerca sede o città…" class="input sm:max-w-xs">
@@ -6,6 +27,7 @@
                 <x-ui.select-search model="filtroCliente" :live="true" placeholder="Tutti i clienti" :options="$clienti->map(fn ($c) => ['id' => (string) $c->id, 'nome' => $c->ragione_sociale])->values()" class="sm:w-72" />
             @endunless
         </div>
+        @if (auth()->user()->isStaff())<button wire:click="esporta" class="btn-soft">Esporta CSV</button>@endif
         @if (auth()->user()->isStaff()) <a href="{{ route('sedi.crea', array_filter(['cliente' => $filtroCliente])) }}" wire:navigate class="btn-primary">+ Nuova sede</a> @endif
     </div>
 
@@ -28,6 +50,8 @@
                 </div>
                 <div class="mt-3 flex flex-wrap gap-2 text-xs">
                     <span class="rounded-full bg-sky-50 px-2.5 py-1 font-medium text-sky-700">{{ $s->postazioni_count }} postazioni</span>
+                    <span class="rounded-full bg-sky-50 px-2.5 py-1 font-medium text-sky-700">{{ $s->turni_count }} turni · {{ $s->turni_conclusi_count }} conclusi</span>
+                    @if (! $s->lat && ! $s->lng)<span class="rounded-full bg-amber-50 px-2.5 py-1 font-medium text-amber-700">senza coordinate</span>@endif
                     <span class="rounded-full bg-sky-50 px-2.5 py-1 font-medium text-sky-700">raggio {{ $s->distanza_max }} m</span>
                     <span class="rounded-full bg-sky-50 px-2.5 py-1 font-medium text-sky-700">{{ collect($s->ore_richieste)->sum() }} h/sett.</span>
                 </div>
@@ -36,7 +60,7 @@
                     @if (auth()->user()->isStaff())
                         <button wire:click="qr({{ $s->id }})" class="btn-soft !px-3 !py-1.5">Genera QR</button>
                         <a href="{{ route('sedi.modifica', $s) }}" wire:navigate class="btn-soft !px-3 !py-1.5">Modifica</a>
-                        <button wire:click="elimina({{ $s->id }})" wire:confirm="Eliminare la sede?" class="btn-danger !px-3 !py-1.5">Elimina</button>
+                        <button wire:click="richiediEliminazione({{ $s->id }})" class="btn-danger !px-3 !py-1.5">Elimina</button>
                     @endif
                 </div>
             </div>

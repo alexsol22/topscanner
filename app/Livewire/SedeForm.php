@@ -8,7 +8,7 @@ use App\Models\Legacy\Comune;
 use App\Models\Legacy\Postazione;
 use App\Models\Legacy\Provincia;
 use App\Models\Legacy\Sede;
-use Illuminate\Support\Facades\DB;
+use App\Models\Legacy\Tracking;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -137,6 +137,10 @@ class SedeForm extends Component
 
             throw $e;
         }
+        // Come nel vecchio: il cliente di una sede esistente non cambia (le cartelle sono per cliente).
+        if ($this->sedeId) {
+            $this->f['cliente_id'] = $this->sediVisibili()->findOrFail($this->sedeId)->id_cliente;
+        }
         $this->clientiVisibili()->findOrFail($this->f['cliente_id']);
 
         $sigla = strtoupper($this->f['provincia']);
@@ -173,18 +177,22 @@ class SedeForm extends Component
             $dati[$colonna] = $this->ore[$n] === '' ? null : (int) $this->ore[$n];
         }
 
-        DB::connection('mysql')->transaction(function () use ($dati) {
-            if ($this->sedeId) {
-                $sede = $this->sediVisibili()->findOrFail($this->sedeId);
-                $sede->update($dati);
-            } else {
-                $sede = Sede::create($dati);
-                $sede->update(['id_codice' => Codice::nuovo(Codice::SEDE, $sede->id)->id]);
-            }
+        // Niente transazione: le tabelle legacy sono MyISAM e GTID vieta di mischiarle con tabelle transazionali.
+        if ($this->sedeId) {
+            $sede = $this->sediVisibili()->findOrFail($this->sedeId);
+            $sede->update($dati);
+        } else {
+            $sede = Sede::create($dati);
+            $sede->update(['id_codice' => Codice::nuovo(Codice::SEDE, $sede->id)->id]);
+        }
 
-            $this->salvaFoto($sede);
-            $this->salvaPostazioni($sede);
-        });
+        $this->salvaFoto($sede);
+        $this->salvaPostazioni($sede);
+
+        Tracking::registra(($this->sedeId ? 'Aggiornamento dati sede ' : 'Creazione sede ').$sede->descrizione);
+        if (! $sede->lat && ! $sede->lng) {
+            session()->flash('avviso', "Sede {$sede->descrizione} salvata senza coordinate: il controllo della distanza di scansione non funzionerà finché non le imposti.");
+        }
 
         return $this->redirectRoute('sedi', navigate: true);
     }

@@ -5,7 +5,6 @@ namespace App\Livewire;
 use App\Models\Legacy;
 use App\Models\Legacy\Admin;
 use App\Models\Legacy\BachecaView;
-use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
@@ -49,17 +48,15 @@ class Bacheca extends Component
             return;
         }
 
-        DB::connection()->transaction(function () {
-            $avviso = Legacy\Bacheca::create([
-                'titolo' => $this->f['titolo'], 'testo' => $this->f['testo'],
-                'tutti' => $this->f['per_tutti'] ? 'Y' : 'N', 'data_invio' => today(),
-            ]);
-            $ids = $this->f['per_tutti'] ? $this->operatoriAttivi()->pluck('id') : collect($this->destinatari);
-            $avviso->update(['quanti' => $ids->count()]);
-            foreach ($ids as $id) {
-                BachecaView::create(['id_bacheca' => $avviso->id, 'id_operatore' => $id]);
-            }
-        });
+        $avviso = Legacy\Bacheca::create([
+            'titolo' => $this->f['titolo'], 'testo' => $this->f['testo'],
+            'tutti' => $this->f['per_tutti'] ? 'Y' : 'N', 'data_invio' => today(),
+        ]);
+        $ids = $this->f['per_tutti'] ? $this->operatoriAttivi()->pluck('id') : collect($this->destinatari);
+        $avviso->update(['quanti' => $ids->count()]);
+        foreach ($ids as $id) {
+            BachecaView::create(['id_bacheca' => $avviso->id, 'id_operatore' => $id]);
+        }
 
         $this->modal = false;
     }
