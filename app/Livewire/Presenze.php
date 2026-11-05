@@ -4,6 +4,7 @@ namespace App\Livewire;
 
 use App\Livewire\Concerns\ConAccesso;
 use App\Models\Legacy\Admin;
+use App\Models\Legacy\Cliente;
 use App\Models\Legacy\Gda;
 use App\Models\Legacy\Turno;
 use Carbon\Carbon;
@@ -26,6 +27,10 @@ class Presenze extends Component
 
     public ?int $filtroOperatore = null;
 
+    public ?int $filtroCliente = null;
+
+    public string $vista = 'clienti';
+
     public function mount(): void
     {
         $this->da = now()->startOfMonth()->toDateString();
@@ -37,6 +42,12 @@ class Presenze extends Component
         $this->resetPage();
     }
 
+    public function updatedVista(): void
+    {
+        $this->filtroCliente = null;
+        $this->filtroOperatore = null;
+    }
+
     public function render()
     {
         $clienti = $this->clientiVisibili()->select('tc_clienti.id');
@@ -45,6 +56,7 @@ class Presenze extends Component
             ->when($this->da, fn ($q) => $q->where($campo, '>=', Carbon::parse($this->da)->toDateString()))
             ->when($this->a, fn ($q) => $q->where($campo, '<=', Carbon::parse($this->a)->toDateString()))
             ->when($this->filtroSede, fn ($q) => $q->where('id_sede', $this->filtroSede))
+            ->when($this->filtroCliente, fn ($q) => $q->where('id_cliente', $this->filtroCliente))
             ->when($this->filtroOperatore, fn ($q) => $q->where('id_operatore', $this->filtroOperatore));
 
         $turni = $filtra(Turno::query(), 'data_inizio');
@@ -60,10 +72,22 @@ class Presenze extends Component
             'nome' => $operatoriGruppi->get($g->id_operatore)?->nome_completo ?? '—', 'previste' => (float) $g->previste, 'lavorate' => (float) $g->lavorate,
         ]])->sortBy('nome');
 
+        $perCliente = $filtra(Turno::query(), 'data_inizio')
+            ->selectRaw('id_cliente, SUM(ore) as previste, SUM(ore_lavorate) as lavorate')
+            ->groupBy('id_cliente')
+            ->havingRaw('SUM(ore) > 0')
+            ->get();
+        $nomiClienti = Cliente::whereIn('id', $perCliente->pluck('id_cliente'))->pluck('ragione_sociale', 'id');
+        $perCliente = $perCliente->map(fn ($g) => [
+            'nome' => $nomiClienti->get($g->id_cliente, '—'), 'previste' => (float) $g->previste, 'lavorate' => (float) $g->lavorate,
+        ])->sortBy('nome');
+
         return view('livewire.presenze', [
+            'perCliente' => $perCliente,
             'previste' => $previste, 'lavorate' => $lavorate, 'perOperatore' => $perOperatore,
             'righe' => $filtra(Gda::query(), 'data')->with(['operatore', 'sede', 'postazione'])->orderByDesc('data')->orderByDesc('orario')->paginate(15),
             'sedi' => $this->sediVisibili()->orderBy('descrizione')->get(['id', 'descrizione']),
+            'clientiElenco' => $this->clientiVisibili()->orderBy('ragione_sociale')->get(['tc_clienti.id', 'ragione_sociale']),
             'operatori' => Admin::where('user_type', 4)->orderBy('cognome')->get(),
         ]);
     }

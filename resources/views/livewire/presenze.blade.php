@@ -2,9 +2,13 @@
     <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <div><label class="label">Dal</label><input type="date" wire:model.live="da" class="input"></div>
         <div><label class="label">Al</label><input type="date" wire:model.live="a" class="input"></div>
-        <div><label class="label">Sede</label><select wire:model.live="filtroSede" class="input"><option value="">Tutte</option>@foreach ($sedi as $s)<option value="{{ $s->id }}">{{ $s->descrizione }}</option>@endforeach</select></div>
+        <div><label class="label">Sede</label><x-select-ricerca model="filtroSede" :options="$sedi->map(fn ($s) => ['id' => $s->id, 'label' => $s->descrizione])->values()" /></div>
         @unless (auth()->user()->isCliente())
-            <div><label class="label">Operatore</label><select wire:model.live="filtroOperatore" class="input"><option value="">Tutti</option>@foreach ($operatori as $o)<option value="{{ $o->id }}">{{ $o->nome_completo }}</option>@endforeach</select></div>
+            @if ($vista === 'clienti')
+                <div wire:key="filtro-cliente"><label class="label">Cliente</label><x-select-ricerca model="filtroCliente" :options="$clientiElenco->map(fn ($c) => ['id' => $c->id, 'label' => $c->ragione_sociale])->values()" /></div>
+            @else
+                <div wire:key="filtro-operatore"><label class="label">Operatore</label><x-select-ricerca model="filtroOperatore" :options="$operatori->map(fn ($o) => ['id' => $o->id, 'label' => $o->nome_completo])->values()" /></div>
+            @endif
         @endunless
     </div>
 
@@ -18,14 +22,38 @@
         <a href="{{ route('presenze.esporta', ['da' => $da, 'a' => $a, 'sede' => $filtroSede]) }}" class="btn-soft">⬇ Esporta CSV</a>
     </div>
 
-    @if ($perOperatore->isNotEmpty() && ! auth()->user()->isCliente())
+    @unless (auth()->user()->isCliente())
+        <div class="flex gap-2" role="tablist" aria-label="Conteggio ore per">
+            @foreach (['clienti' => 'Clienti', 'operatori' => 'Operatori'] as $chiave => $etichetta)
+                <button type="button" role="tab" aria-selected="{{ $vista === $chiave ? 'true' : 'false' }}" wire:click="$set('vista', '{{ $chiave }}')"
+                    class="{{ $vista === $chiave ? 'btn-primary' : 'btn-soft' }}">{{ $etichetta }}</button>
+            @endforeach
+        </div>
+    @endunless
+
+    @if ($vista === 'clienti' && $perCliente->isNotEmpty() && ! auth()->user()->isCliente())
+        <div class="card overflow-hidden">
+            <div class="border-b border-sky-100 px-5 py-4 font-semibold text-slate-800">Conteggio orario clienti</div>
+            <div class="overflow-x-auto"><table class="min-w-full divide-y divide-sky-50">
+                <thead class="bg-sky-50/60"><tr><th class="th">Cliente</th><th class="th">Ore previste</th><th class="th">Ore lavorate</th><th class="th">Saldo</th><th class="th w-24"></th></tr></thead>
+                <tbody class="divide-y divide-sky-50">
+                    @foreach ($perCliente as $idCliente => $c)
+                        @php($saldo = $c['lavorate'] - $c['previste'])
+                        <tr><td class="td font-medium">{{ $c['nome'] }}</td><td class="td">{{ $c['previste'] }}</td><td class="td">{{ $c['lavorate'] }}</td><td class="td font-semibold {{ $saldo < 0 ? 'text-rose-600' : ($saldo > 0 ? 'text-emerald-600' : '') }}">{{ $saldo }}</td><td class="td text-right"><a href="{{ route('presenze.ore', ['tipo' => 'cliente', 'id' => $idCliente, 'da' => $da, 'a' => $a, 'sede' => $filtroSede]) }}" class="btn-soft" title="Scarica Excel" aria-label="Scarica Excel di {{ $c['nome'] }}">⬇ Excel</a></td></tr>
+                    @endforeach
+                </tbody>
+            </table></div>
+        </div>
+    @endif
+
+    @if ($vista === 'operatori' && $perOperatore->isNotEmpty() && ! auth()->user()->isCliente())
         <div class="card overflow-hidden">
             <div class="border-b border-sky-100 px-5 py-4 font-semibold text-slate-800">Ore per operatore</div>
             <div class="overflow-x-auto"><table class="min-w-full divide-y divide-sky-50">
-                <thead class="bg-sky-50/60"><tr><th class="th">Operatore</th><th class="th">Previste</th><th class="th">Lavorate</th><th class="th">Saldo</th></tr></thead>
+                <thead class="bg-sky-50/60"><tr><th class="th">Operatore</th><th class="th">Previste</th><th class="th">Lavorate</th><th class="th">Saldo</th><th class="th w-24"></th></tr></thead>
                 <tbody class="divide-y divide-sky-50">
-                    @foreach ($perOperatore as $o)
-                        <tr><td class="td font-medium">{{ $o['nome'] }}</td><td class="td">{{ $o['previste'] }}</td><td class="td">{{ $o['lavorate'] }}</td><td class="td {{ $o['lavorate'] - $o['previste'] < 0 ? 'text-rose-600' : '' }}">{{ $o['lavorate'] - $o['previste'] }}</td></tr>
+                    @foreach ($perOperatore as $idOperatore => $o)
+                        <tr><td class="td font-medium">{{ $o['nome'] }}</td><td class="td">{{ $o['previste'] }}</td><td class="td">{{ $o['lavorate'] }}</td><td class="td {{ $o['lavorate'] - $o['previste'] < 0 ? 'text-rose-600' : '' }}">{{ $o['lavorate'] - $o['previste'] }}</td><td class="td text-right"><a href="{{ route('presenze.ore', ['tipo' => 'operatore', 'id' => $idOperatore, 'da' => $da, 'a' => $a, 'sede' => $filtroSede]) }}" class="btn-soft" title="Scarica Excel" aria-label="Scarica Excel di {{ $o['nome'] }}">⬇ Excel</a></td></tr>
                     @endforeach
                 </tbody>
             </table></div>

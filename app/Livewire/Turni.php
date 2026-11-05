@@ -4,6 +4,7 @@ namespace App\Livewire;
 
 use App\Livewire\Concerns\ConAccesso;
 use App\Models\Legacy\Admin;
+use App\Models\Legacy\Gda;
 use App\Models\Legacy\Turno;
 use App\Services\Calcoli;
 use App\Services\PianificazioneTurni;
@@ -344,7 +345,11 @@ class Turni extends Component
             'giorno' => [$primo->copy()->startOfDay(), $primo->copy()->endOfDay()],
             default => [$primo->copy()->startOfMonth()->startOfWeek(), $primo->copy()->endOfMonth()->endOfWeek()],
         };
-        $perGiorno = $this->applicaRicerca($this->query()->with(['operatore', 'sede']))
+        $perGiorno = $this->applicaRicerca($this->query()->with([
+            'operatore',
+            'sede',
+            'presenze' => fn ($query) => $query->whereIn('tipo', [Gda::INIZIO, Gda::FINE])->orderBy('data')->orderBy('orario'),
+        ]))
             ->whereBetween('data_inizio', [$da->toDateString(), $a->toDateString()])
             ->orderBy('data_inizio')->orderBy('ora_inizio')->get()
             ->groupBy(fn ($t) => $t->inizio->toDateString());
@@ -356,7 +361,11 @@ class Turni extends Component
     {
         $turni = null;
         if ($this->vista === 'lista') {
-            $turni = $this->applicaRicerca($this->query()->with(['operatore', 'sede.cliente']))
+            $turni = $this->applicaRicerca($this->query()->with([
+                'operatore',
+                'sede.cliente',
+                'presenze' => fn ($query) => $query->whereIn('tipo', [Gda::INIZIO, Gda::FINE])->orderBy('data')->orderBy('orario'),
+            ]))
                 ->when($this->da, fn ($q) => $q->where('data_inizio', '>=', Carbon::parse($this->da)->toDateString()))
                 ->when($this->a, fn ($q) => $q->where('data_inizio', '<=', Carbon::parse($this->a)->toDateString()))
                 ->orderBy('data_inizio')->orderBy('ora_inizio')->paginate(15);
@@ -364,7 +373,11 @@ class Turni extends Component
         $calendario = $this->vista === 'lista' ? null : $this->calendario();
 
         $turnoDettaglio = $this->turnoSelezionatoId
-            ? $this->query()->with(['operatore', 'sede.cliente'])->findOrFail($this->turnoSelezionatoId)
+            ? $this->query()->with([
+                'operatore',
+                'sede.cliente',
+                'presenze' => fn ($query) => $query->whereIn('tipo', [Gda::INIZIO, Gda::FINE])->orderBy('data')->orderBy('orario'),
+            ])->findOrFail($this->turnoSelezionatoId)
             : null;
 
         $disponibili = collect();

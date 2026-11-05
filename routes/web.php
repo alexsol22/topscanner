@@ -45,6 +45,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/turni', Livewire\Turni::class)->name('turni');
         Route::get('/presenze', Livewire\Presenze::class)->name('presenze');
         Route::get('/presenze/esporta', [DownloadController::class, 'presenze'])->name('presenze.esporta');
+        Route::get('/presenze/ore/{tipo}/{id}', [DownloadController::class, 'oreTurni'])->whereIn('tipo', ['cliente', 'operatore'])->whereNumber('id')->name('presenze.ore');
     });
 
     Route::middleware('ruolo:operatore')->get('/miei-turni', Livewire\Turni::class)->name('miei-turni');
