@@ -17,7 +17,7 @@ class GeneratoreQr extends Component
 
     public string $contenuto = '';
 
-    public string $titolo = 'Security Scanner';
+    public string $titolo = 'Omnia Control';
 
     public string $colore = '#0369a1';
 
@@ -83,7 +83,7 @@ class GeneratoreQr extends Component
         $logoUri = $this->logo ? 'data:'.$this->logo->getMimeType().';base64,'.base64_encode($this->logo->get()) : null;
 
         return view('livewire.generatore-qr', [
-            'svg' => $gen->svg($this->contenuto !== '' ? $this->contenuto : ($this->titolo ?: 'Security Scanner'), $this->titolo, $logoUri, $this->colore),
+            'svg' => $gen->svg($this->contenuto !== '' ? $this->contenuto : ($this->titolo ?: 'Omnia Control'), $this->titolo, $logoUri, $this->colore),
             'clienti' => $this->clientiVisibili()->orderBy('ragione_sociale')->get(['id', 'ragione_sociale']),
             'sedi' => $this->clienteId ? $this->sediVisibili()->where('id_cliente', $this->clienteId)->orderBy('descrizione')->get(['id', 'descrizione']) : collect(),
         ]);

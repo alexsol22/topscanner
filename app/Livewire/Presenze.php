@@ -48,12 +48,17 @@ class Presenze extends Component
             ->when($this->filtroOperatore, fn ($q) => $q->where('id_operatore', $this->filtroOperatore));
 
         $turni = $filtra(Turno::query(), 'data_inizio');
-        $previste = (float) (clone $turni)->sum('ore');
-        $lavorate = (float) (clone $turni)->sum('ore_lavorate');
+        $gruppi = $filtra(Turno::query(), 'data_inizio')
+            ->selectRaw('id_operatore, SUM(ore) as previste, SUM(ore_lavorate) as lavorate')
+            ->groupBy('id_operatore')
+            ->get();
+        $previste = (float) $gruppi->sum('previste');
+        $lavorate = (float) $gruppi->sum('lavorate');
 
-        $perOperatore = $filtra(Turno::query(), 'data_inizio')->with('operatore')->get()->groupBy('id_operatore')->map(fn ($g) => [
-            'nome' => $g->first()->operatore?->nome_completo ?? '—', 'previste' => $g->sum('ore'), 'lavorate' => $g->sum('ore_lavorate'),
-        ])->sortBy('nome');
+        $operatoriGruppi = Admin::whereIn('id', $gruppi->pluck('id_operatore')->filter())->get()->keyBy('id');
+        $perOperatore = $gruppi->mapWithKeys(fn ($g) => [$g->id_operatore => [
+            'nome' => $operatoriGruppi->get($g->id_operatore)?->nome_completo ?? '—', 'previste' => (float) $g->previste, 'lavorate' => (float) $g->lavorate,
+        ]])->sortBy('nome');
 
         return view('livewire.presenze', [
             'previste' => $previste, 'lavorate' => $lavorate, 'perOperatore' => $perOperatore,

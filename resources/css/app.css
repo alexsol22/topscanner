@@ -3,19 +3,116 @@
 @source '../../storage/framework/views/*.php';
 @source '../views/**/*.blade.php';
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
     --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
 }
 
 @layer components {
-    .card { @apply rounded-2xl bg-white shadow-sm ring-1 ring-sky-100; }
+    .card { @apply rounded-2xl bg-(--surface) shadow-sm ring-1 ring-sky-100; }
         .btn-primary { @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-sky-300 disabled:opacity-50 bg-sky-500 text-white shadow-sm hover:bg-sky-600; }
     .btn-soft { @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-sky-300 disabled:opacity-50 bg-sky-50 text-sky-700 hover:bg-sky-100; }
     .btn-danger { @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-sky-300 disabled:opacity-50 bg-rose-50 text-rose-600 hover:bg-rose-100; }
-    .input { @apply block w-full rounded-xl border-0 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm ring-1 ring-sky-200 placeholder:text-slate-400 focus:ring-2 focus:ring-sky-400; }
+    .input { @apply block w-full rounded-xl border-0 bg-(--surface-input) px-3 py-2 text-sm text-slate-800 shadow-sm ring-1 ring-sky-200 placeholder:text-slate-400 focus:ring-2 focus:ring-sky-400; }
     .label { @apply mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500; }
     .th { @apply px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500; }
     .td { @apply px-4 py-3 text-sm text-slate-700; }
 }
+
+/* Tema chiaro/scuro: in scuro la palette viene rimappata, così ogni pagina si adatta in modo uniforme */
+:root {
+    --surface: #fff;
+    --surface-input: #fff;
+    --page: #f0f9ff;
+}
+
+html.dark {
+    color-scheme: dark;
+    --surface: #111b30;
+    --surface-input: #0c1527;
+    --page: #0a1220;
+
+    --color-slate-50: #141d33;
+    --color-slate-100: #1a2540;
+    --color-slate-200: #2a3752;
+    --color-slate-300: #475569;
+    --color-slate-400: #7a879c;
+    --color-slate-500: #94a1b6;
+    --color-slate-600: #aab5c7;
+    --color-slate-700: #c9d2df;
+    --color-slate-800: #e6ebf2;
+    --color-slate-900: #020617;
+
+    --color-gray-50: #141d33;
+    --color-gray-100: #1a2540;
+    --color-gray-200: #2a3752;
+    --color-gray-300: #475569;
+    --color-gray-400: #7a879c;
+    --color-gray-500: #94a1b6;
+    --color-gray-600: #aab5c7;
+    --color-gray-700: #c9d2df;
+    --color-gray-800: #e6ebf2;
+    --color-gray-900: #f1f5f9;
+
+    --color-sky-50: #15233a;
+    --color-sky-100: #1b2d4a;
+    --color-sky-200: #27406a;
+    --color-sky-300: #35597f;
+    --color-sky-400: #38bdf8;
+    --color-sky-600: #38a9e0;
+    --color-sky-700: #7dd3fc;
+    --color-sky-800: #bae6fd;
+
+    --color-emerald-50: #0c2a22;
+    --color-emerald-100: #11382d;
+    --color-emerald-200: #1b5443;
+    --color-emerald-600: #34d399;
+    --color-emerald-700: #6ee7b7;
+    --color-emerald-800: #a7f3d0;
+
+    --color-rose-50: #2d1219;
+    --color-rose-100: #3f1823;
+    --color-rose-200: #6b2536;
+    --color-rose-300: #9f3a52;
+    --color-rose-600: #fb7185;
+    --color-rose-700: #fda4af;
+    --color-rose-800: #fecdd3;
+
+    --color-amber-50: #2a1f0b;
+    --color-amber-100: #3a2a0c;
+    --color-amber-200: #5c4410;
+    --color-amber-700: #fcd34d;
+    --color-amber-800: #fde68a;
+
+    --color-orange-100: #3a200c;
+    --color-orange-700: #fdba74;
+    --color-orange-800: #fed7aa;
+
+    --color-teal-100: #0f3330;
+    --color-teal-800: #99f6e4;
+
+    --color-blue-300: #35597f;
+    --color-blue-700: #7dd3fc;
+    --color-blue-800: #bae6fd;
+}
+
+html.dark,
+html.dark body {
+    background-color: var(--page);
+}
+
+html.dark .bg-white { background-color: var(--surface); }
+html.dark .bg-white\/80 { background-color: color-mix(in srgb, var(--surface) 80%, transparent); }
+html.dark .bg-white\/70 { background-color: rgb(255 255 255 / 0.1); }
+html.dark .hover\:bg-white:hover { background-color: #1b2d4a; }
+html.dark .ring-white { --tw-ring-color: var(--surface); }
+html.dark .border-white { border-color: var(--surface); }
+html.dark .via-white { --tw-gradient-via: var(--page); }
+html.dark .from-sky-50 { --tw-gradient-from: #0d1a2e; }
+html.dark .to-sky-100 { --tw-gradient-to: #0a1220; }
+html.dark .btn-primary:hover { background-color: #0284c7; }
+html.dark .shadow-sky-200 { --tw-shadow-color: rgb(14 165 233 / 0.25); }
+html.dark ::placeholder { color: #64748b; }
 
 [x-cloak] { display: none !important; }

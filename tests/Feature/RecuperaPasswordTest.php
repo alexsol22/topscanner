@@ -50,7 +50,7 @@ class RecuperaPasswordTest extends TestCase
             $table->string('email')->nullable();
         });
         DB::table('tc_config')->insert([
-            'app' => 'Security Scanner', 'ragione_sociale' => 'Top Security Srl', 'colore_primario' => '#289aca',
+            'app' => 'Omnia Control', 'ragione_sociale' => 'Top Security Srl', 'colore_primario' => '#289aca',
             'societa_indirizzo' => 'Via Grandi n&deg; 4', 'societa_cap' => '41044', 'societa_comune' => 'Campogalliano',
             'societa_provincia' => 'MO', 'societa_telefono' => '059.3367149', 'societa_email' => 'info@example.test', 'societa_iva' => '0123',
         ]);

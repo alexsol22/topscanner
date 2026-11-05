@@ -29,12 +29,12 @@ class Dashboard extends Component
             ['nome' => 'Clienti', 'valore' => $clientiVisibili->count(), 'destinazione' => 'clienti'],
             ['nome' => 'Sedi', 'valore' => Sede::query()->whereIn('id_cliente', clone $idClientiVisibili)->count(), 'destinazione' => 'sedi'],
             ['nome' => 'Operatori attivi', 'valore' => Admin::query()->where('user_type', 4)->where('attivo', 'Y')->count(), 'destinazione' => 'operatori'],
-            ['nome' => 'Turni oggi', 'valore' => (clone $turniVisibili)->whereDate('data_inizio', '<=', $oggi)->whereDate('data_fine', '>=', $oggi)->count(), 'destinazione' => 'turni'],
+            ['nome' => 'Turni oggi', 'valore' => (clone $turniVisibili)->where('data_inizio', '<=', $oggi->toDateString())->where('data_fine', '>=', $oggi->toDateString())->count(), 'destinazione' => 'turni'],
         ];
 
         $prossimiTurni = (clone $turniVisibili)
             ->with(['operatore', 'cliente', 'sede'])
-            ->whereDate('data_inizio', '>=', $oggi)
+            ->where('data_inizio', '>=', $oggi->toDateString())
             ->orderBy('data_inizio')
             ->orderBy('ora_inizio')
             ->limit(5)

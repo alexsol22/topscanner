@@ -20,7 +20,7 @@ class Timbratura
 
         $turni = Turno::with(['sede.comune', 'sede.provincia', 'cliente'])
             ->where('id_operatore', $operatore->id)
-            ->where(fn ($q) => $q->whereDate('data_inizio', $oggi)->orWhereDate('data_fine', $oggi))
+            ->where(fn ($q) => $q->where('data_inizio', $oggi)->orWhere('data_fine', $oggi))
             ->orderBy('data_inizio')->orderBy('ora_inizio')
             ->get();
 
@@ -174,7 +174,7 @@ class Timbratura
 
         $turno = $cod ? Turno::where('id_sede', $cod->id_sede)
             ->where('stato', 'P')
-            ->where(fn ($q) => $q->whereDate('data_inizio', today())->orWhereDate('data_fine', today()))
+            ->where(fn ($q) => $q->where('data_inizio', today()->toDateString())->orWhere('data_fine', today()->toDateString()))
             ->orderBy('data_inizio')->orderBy('ora_inizio')
             ->first() : null;
 

@@ -177,7 +177,7 @@
                 title="Contenuto dell'email inviata"
                 sandbox=""
                 referrerpolicy="no-referrer"
-                class="h-[70vh] w-full rounded-xl border border-sky-100 bg-white"
+                class="h-[70vh] w-full rounded-xl border border-sky-100 bg-[#fff]"
                 srcdoc="{{ $emailVisualizzazione }}"
             ></iframe>
             <div class="mt-4 flex justify-end">
