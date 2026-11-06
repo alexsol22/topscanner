@@ -3,7 +3,9 @@
 namespace App\Livewire;
 
 use App\Enums\Ruolo;
+use App\Models\Legacy\Tracking;
 use App\Models\User;
+use App\Services\Comunicazioni;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
@@ -26,6 +28,11 @@ class Amministratori extends Component
 
     public array $f = [];
 
+    public function mount(): void
+    {
+        Tracking::registra('Visualizzazione elenco utenti ');
+    }
+
     public function updatingCerca(): void
     {
         $this->resetPage();
@@ -37,7 +44,7 @@ class Amministratori extends Component
             'f.name' => 'required|string|max:30',
             'f.cognome' => 'required|string|max:30',
             'f.email' => ['required', 'email', 'max:40', 'max:255', Rule::unique('tc_admin', 'email')->ignore($this->userId)],
-            'f.cellulare' => 'nullable|string|max:20',
+            'f.cellulare' => 'required|regex:/^\s*[+-]?\d+\s*$/|max:20',
             'f.password' => [$this->userId ? 'nullable' : 'required', 'string', 'min:8', 'max:40'],
         ];
     }
@@ -86,8 +93,13 @@ class Amministratori extends Component
                 $dati['password'] = $this->f['password'];
             }
             $user->update($dati);
+            Tracking::registra('Modifica operatore '.$user->user);
         } else {
-            User::create($dati + ['password' => $this->f['password'], 'attivo' => true]);
+            $user = User::create($dati + ['password' => $this->f['password'], 'attivo' => true]);
+            Tracking::registra('Nuovo utente '.$user->user);
+
+            // Come Yii (sendEmailAccessi): alla creazione l'utente riceve le credenziali provvisorie.
+            app(Comunicazioni::class)->inviaCredenziali($user->nome_completo, (string) $user->user, (string) $user->email, $this->f['password']);
         }
 
         $this->modal = false;
@@ -98,6 +110,7 @@ class Amministratori extends Component
         $this->soloStaff();
         $user = $this->amministratori()->findOrFail($id);
         $user->update(['attivo' => ! $user->attivo]);
+        Tracking::registra(($user->attivo ? 'Abilitazione ' : 'Disabilitazione ').' elenco utenti '.$user->user);
     }
 
     private function soloStaff(): void

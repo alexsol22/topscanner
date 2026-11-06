@@ -151,6 +151,17 @@ class OperatoriMaterialeTest extends TestCase
         ]);
         DB::purge('mysql');
 
+        Schema::create('_tracking', function (Blueprint $table): void {
+            $table->unsignedInteger('id')->primary();
+            $table->unsignedInteger('id_user')->nullable();
+            $table->string('addr')->nullable();
+            $table->string('host')->nullable();
+            $table->string('agent')->nullable();
+            $table->string('pagina')->nullable();
+            $table->dateTime('data_view')->nullable();
+            $table->text('action')->nullable();
+        });
+
         Schema::create('tc_admin', function (Blueprint $table): void {
             $table->increments('id');
             $table->unsignedInteger('user_type')->nullable();

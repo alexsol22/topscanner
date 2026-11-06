@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\RuoloRichiesto;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -12,8 +13,9 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->alias(['ruolo' => \App\Http\Middleware\RuoloRichiesto::class]);
+        $middleware->alias(['ruolo' => RuoloRichiesto::class]);
         $middleware->redirectGuestsTo('/login');
+        $middleware->validateCsrfTokens(except: ['sms/consegna']);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

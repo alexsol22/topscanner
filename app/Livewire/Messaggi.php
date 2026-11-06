@@ -5,6 +5,8 @@ namespace App\Livewire;
 use App\Models\Legacy\Admin;
 use App\Models\Legacy\Email;
 use App\Models\Legacy\SendSms;
+use App\Models\Legacy\Tracking;
+use App\Services\Sms;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Livewire\Attributes\Layout;
@@ -41,6 +43,10 @@ class Messaggi extends Component
 
         $this->canale = $canale;
         $this->resetPage();
+
+        if ($canale === 'email') {
+            Tracking::registra('Visualizzazione elenco email   ');
+        }
     }
 
     public function updatedFiltroOperatore(): void
@@ -72,6 +78,7 @@ class Messaggi extends Component
         abort_unless(auth()->user()->isStaff(), 403);
 
         $email = Email::query()->findOrFail($id);
+        Tracking::registra('Visualizzazione dettaglio  email  '.$email->oggetto);
         $policy = "default-src 'none'; img-src data: cid:; style-src 'unsafe-inline'; font-src data:; base-uri 'none'; form-action 'none'";
 
         $this->emailVisualizzazione = '<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="'.$policy.'"></head><body>'.$email->email.'</body></html>';
@@ -108,6 +115,7 @@ class Messaggi extends Component
                     ])
                     ->orderByDesc('data_invio')
                     ->paginate(25),
+                'crediti' => app(Sms::class)->crediti(),
             ],
             $this->canale === 'email' => [
                 'emailInviate' => $this->applicaFiltriInvii(Email::query())

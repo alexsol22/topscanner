@@ -10,7 +10,9 @@ use App\Models\Legacy\Materiale;
 use App\Models\Legacy\Messaggio;
 use App\Models\Legacy\Provincia;
 use App\Models\Legacy\TipoMateriale;
+use App\Models\Legacy\Tracking;
 use App\Models\User;
+use App\Services\Comunicazioni;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -88,7 +90,7 @@ class Operatori extends Component
             'f.name' => 'required|string|max:30',
             'f.cognome' => 'required|string|max:30',
             'f.email' => ['required', 'email', 'max:40', Rule::unique('tc_admin', 'email')->ignore($this->userId)],
-            'f.cellulare' => 'nullable|string|max:20',
+            'f.cellulare' => 'required|regex:/^\s*[+-]?\d+\s*$/|max:20',
             'f.ruolo' => ['required', Rule::in(array_column(Ruolo::cases(), 'value'))],
             'f.cliente_id' => 'nullable|required_if:f.ruolo,cliente|exists:tc_clienti,id',
             'f.codice' => 'nullable|required_if:f.ruolo,operatore|string|max:255',
@@ -107,6 +109,8 @@ class Operatori extends Component
     /** Dopo un refresh il form riapre lo stesso record (stato preso dall'URL). */
     public function mount(): void
     {
+        Tracking::registra('Visualizzazione elenco operatori ');
+
         if (! $this->editing) {
             return;
         }
@@ -165,11 +169,16 @@ class Operatori extends Component
             $dati['cliente_id'] = null;
         }
 
+        $password = null;
+
         if ($this->userId) {
             $u = $this->query()->findOrFail($this->userId);
             $u->update($dati + ($this->f['password'] ? ['password' => $this->f['password']] : []));
+            Tracking::registra('Modifica operatore '.$u->user);
         } else {
-            $u = User::create($dati + ['password' => $this->f['password'] ?: Str::password(8, symbols: false)]);
+            $password = $this->f['password'] ?: Str::password(8, symbols: false);
+            $u = User::create($dati + ['password' => $password]);
+            Tracking::registra(($this->f['ruolo'] === 'operatore' ? 'Nuovo operatore ' : 'Nuovo utente ').$u->user);
         }
 
         if ($this->avatar) {
@@ -179,6 +188,14 @@ class Operatori extends Component
         }
 
         $this->editing = false;
+
+        // Come Yii (sendEmailAccessi): alla creazione l'utente riceve le credenziali provvisorie.
+        if ($password !== null) {
+            $inviata = app(Comunicazioni::class)->inviaCredenziali($u->nome_completo, (string) $u->user, (string) $u->email, $password);
+            session()->flash('esito', $inviata
+                ? "Utente creato. Credenziali inviate a {$u->email}."
+                : 'Utente creato, ma l\'email con le credenziali non è stata inviata: comunica la password manualmente.');
+        }
     }
 
     public function aggiungiFormazione(): void
@@ -364,6 +381,7 @@ class Operatori extends Component
         $u = $this->query()->findOrFail($id);
         abort_if($u->id === auth()->id(), 403);
         $u->update(['attivo' => ! $u->attivo]);
+        Tracking::registra(($u->attivo ? 'Abilitazione ' : 'Disabilitazione ').' elenco utenti '.$u->user);
     }
 
     public function richiediEliminazione(int $id): void
@@ -421,6 +439,7 @@ class Operatori extends Component
         }
 
         $utente->delete();
+        Tracking::registra('Cancellazione utente '.$utente->user);
 
         $this->annullaEliminazione();
         session()->flash('esito', "Utente {$utente->nome_completo} eliminato.");

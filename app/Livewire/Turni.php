@@ -7,6 +7,7 @@ use App\Models\Legacy\Admin;
 use App\Models\Legacy\Gda;
 use App\Models\Legacy\Turno;
 use App\Services\Calcoli;
+use App\Services\Comunicazioni;
 use App\Services\PianificazioneTurni;
 use App\Services\Timbratura;
 use Carbon\Carbon;
@@ -29,6 +30,10 @@ class Turni extends Component
     public ?int $filtroSede = null;
 
     public ?int $filtroOperatore = null;
+
+    public ?int $filtroCliente = null;
+
+    public string $filtroStato = '';
 
     public string $vista = 'calendario';
 
@@ -54,6 +59,14 @@ class Turni extends Component
 
     public ?string $esito = null;
 
+    public array $ac = [];
+
+    public bool $modalInvio = false;
+
+    public array $invio = [];
+
+    public ?string $esitoInvio = null;
+
     public function mount(): void
     {
         $this->mese = today()->toDateString();
@@ -64,7 +77,7 @@ class Turni extends Component
 
     public function updating($name): void
     {
-        if (in_array($name, ['da', 'a', 'filtroSede', 'filtroOperatore', 'vista'])) {
+        if (in_array($name, ['da', 'a', 'filtroSede', 'filtroOperatore', 'filtroCliente', 'filtroStato', 'vista'])) {
             $this->resetPage();
         }
     }
@@ -300,8 +313,8 @@ class Turni extends Component
         $this->query()->findOrFail($id)->delete();
     }
 
-    /** Apertura/chiusura manuale del turno da parte dell'amministrazione (apriChiudiTurno di Yii). */
-    public function apriChiudi(int $id, Timbratura $timbratura): void
+    /** Apre il modulo di inizio/chiusura manuale (apriChiudi di Yii): nota, data e ora sono obbligatorie. */
+    public function apriChiudi(int $id): void
     {
         $this->soloStaff();
         $t = $this->query()->findOrFail($id);
@@ -310,7 +323,84 @@ class Turni extends Component
             return;
         }
 
-        $timbratura->apriChiudi($t, auth()->user(), $t->stato === 'P' ? 'I' : 'F', now(), 'Registrazione manuale ('.auth()->user()->nome_completo.')');
+        $previsto = $t->stato === 'P' ? $t->inizio : $t->fine;
+        $this->ac = ['id' => $t->id, 'stato' => $t->stato === 'P' ? 'I' : 'F', 'data' => $previsto->toDateString(), 'ora' => $previsto->format('H:i'), 'note' => ''];
+        $this->resetValidation();
+    }
+
+    public function annullaApriChiudi(): void
+    {
+        $this->ac = [];
+    }
+
+    /** Apertura/chiusura manuale del turno da parte dell'amministrazione (apriChiudiTurno di Yii). */
+    public function confermaApriChiudi(Timbratura $timbratura): void
+    {
+        $this->soloStaff();
+        $this->validate([
+            'ac.note' => 'required|string|max:255',
+            'ac.data' => 'required|date',
+            'ac.ora' => 'required|date_format:H:i',
+        ], [
+            'ac.note.required' => 'Inserire la nota di chiusura / inizio turno.',
+            'ac.data.required' => 'Inserire il giorno.',
+            'ac.ora.required' => 'Inserire l\'orario.',
+        ]);
+
+        $t = $this->query()->findOrFail($this->ac['id']);
+        $stato = $t->stato === 'P' ? 'I' : 'F';
+
+        if (! in_array($t->stato, ['P', 'I'], true)) {
+            $this->ac = [];
+
+            return;
+        }
+
+        $timbratura->apriChiudi($t, auth()->user(), $stato, \Illuminate\Support\Carbon::parse($this->ac['data'].' '.$this->ac['ora']), $this->ac['note']);
+        $this->ac = [];
+    }
+
+    public function nuovoInvio(): void
+    {
+        $this->soloStaff();
+        $this->invio = [
+            'cliente' => $this->filtroCliente, 'sede' => $this->filtroSede, 'operatore' => $this->filtroOperatore,
+            'inizio' => $this->da, 'fine' => $this->a,
+            'testo' => 'Ti ricordiamo l\'inizio del turno il [DATA TURNO] Alle [ORA TURNO] presso la sede [SEDE] al seguente indirizzo [INDIRIZZO]',
+        ];
+        $this->esitoInvio = null;
+        $this->modalInvio = true;
+    }
+
+    /** Accoda i promemoria dei turni agli operatori (sendTurni di Yii). */
+    public function inviaTurni(Comunicazioni $comunicazioni): void
+    {
+        $this->soloStaff();
+        $this->validate([
+            'invio.cliente' => 'nullable|integer',
+            'invio.sede' => 'nullable|integer',
+            'invio.operatore' => 'nullable|integer',
+            'invio.inizio' => 'nullable|date',
+            'invio.fine' => 'nullable|date',
+            'invio.testo' => 'required|string|max:2000',
+        ]);
+
+        $esito = $comunicazioni->accodaPromemoriaTurni(auth()->user(), [
+            'cliente' => $this->invio['cliente'] ?: null,
+            'sede' => $this->invio['sede'] ?: null,
+            'operatore' => $this->invio['operatore'] ?: null,
+            'inizio' => $this->invio['inizio'] ?: null,
+            'fine' => $this->invio['fine'] ?: null,
+        ], $this->invio['testo']);
+
+        $this->esitoInvio = $esito
+            ? "Email turno inviate correttamente. Totale operatori coinvolti {$esito['operatori']}"
+            : 'Non sono stati trovati turni a cui inviare comunicazioni per sede, operatore, data indicate.';
+    }
+
+    public function chiudiInvio(): void
+    {
+        $this->modalInvio = false;
     }
 
     private function allineaSelezioniCalendario(): void
@@ -333,7 +423,54 @@ class Turni extends Component
     {
         return $query
             ->when($this->filtroSede, fn (Builder $query) => $query->where('id_sede', $this->filtroSede))
-            ->when($this->filtroOperatore, fn (Builder $query) => $query->where('id_operatore', $this->filtroOperatore));
+            ->when($this->filtroOperatore, fn (Builder $query) => $query->where('id_operatore', $this->filtroOperatore))
+            ->when($this->filtroCliente, fn (Builder $query) => $query->where('id_cliente', $this->filtroCliente))
+            ->when($this->filtroStato !== '', fn (Builder $query) => $this->filtraPerStato($query, $this->filtroStato));
+    }
+
+    /** Stessi stati di Turno::statoEffettivo (legenda dei colori di Yii). */
+    private function filtraPerStato(Builder $query, string $stato): Builder
+    {
+        $adesso = now()->format('Y-m-d H:i');
+        $inizio = "CONCAT(data_inizio, ' ', ora_inizio)";
+        $fine = "CONCAT(data_fine, ' ', ora_fine)";
+
+        return match ($stato) {
+            'completato' => $query->where('stato', 'F'),
+            'in_corso' => $query->where('stato', 'I')->whereRaw("$fine >= ?", [$adesso]),
+            'non_completato' => $query->where('stato', 'I')->whereRaw("$fine < ?", [$adesso]),
+            'non_eseguito' => $query->whereNotIn('stato', ['F', 'I'])->whereRaw("$inizio < ? AND $fine < ?", [$adesso, $adesso]),
+            'non_timbrato' => $query->whereNotIn('stato', ['F', 'I'])->whereRaw("$inizio < ? AND $fine >= ?", [$adesso, $adesso]),
+            'programmato' => $query->whereNotIn('stato', ['F', 'I'])->whereRaw("$inizio >= ?", [$adesso]),
+            default => $query,
+        };
+    }
+
+    /**
+     * Come Turni::getTotali: somma delle ore previste nel periodo, un solo criterio con priorità cliente, sede, operatore.
+     *
+     * @return array{etichetta: string, ore: float}|null
+     */
+    private function totali(): ?array
+    {
+        [$etichetta, $colonna, $valore] = match (true) {
+            (bool) $this->filtroCliente => ['cliente', 'id_cliente', $this->filtroCliente],
+            (bool) $this->filtroSede => ['sede', 'id_sede', $this->filtroSede],
+            (bool) $this->filtroOperatore => ['operatore', 'id_operatore', $this->filtroOperatore],
+            default => [null, null, null],
+        };
+
+        if (! $etichetta) {
+            return null;
+        }
+
+        $ore = $this->query()
+            ->where($colonna, $valore)
+            ->when($this->da, fn ($q) => $q->where('data_inizio', '>=', Carbon::parse($this->da)->toDateString()))
+            ->when($this->a, fn ($q) => $q->where('data_inizio', '<=', Carbon::parse($this->a)->toDateString()))
+            ->sum('ore');
+
+        return ['etichetta' => $etichetta, 'ore' => (float) $ore];
     }
 
     private function calendario(): array
@@ -424,6 +561,9 @@ class Turni extends Component
             : null;
 
         return view('livewire.turni', [
+            'totali' => $this->vista === 'lista' ? $this->totali() : null,
+            'sediInvio' => $this->modalInvio ? $this->sediVisibili()->orderBy('descrizione')->get(['id', 'descrizione']) : collect(),
+            'operatoriInvio' => $this->modalInvio ? Admin::where('user_type', 4)->where('attivo', 'Y')->orderBy('cognome')->get() : collect(),
             'turnoModifica' => $turnoModifica,
             'turni' => $turni,
             'calendario' => $calendario,

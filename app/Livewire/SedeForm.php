@@ -9,6 +9,7 @@ use App\Models\Legacy\Postazione;
 use App\Models\Legacy\Provincia;
 use App\Models\Legacy\Sede;
 use App\Models\Legacy\Tracking;
+use App\Services\Geocoding;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -172,6 +173,13 @@ class SedeForm extends Component
             'tariffa' => $this->f['tariffa'] === '' ? null : (float) str_replace(',', '.', (string) $this->f['tariffa']),
             'distanza' => (int) $this->f['distanza_max'],
         ];
+
+        // Come _setCoordination di Yii: senza coordinate indicate le ricava dall'indirizzo.
+        if (! $dati['lat'] && ! $dati['lng']) {
+            $coordinate = app(Geocoding::class)->coordinate(trim($this->f['indirizzo'].' '.$this->f['cap'].' '.$comune->comune));
+            $dati['lat'] = $coordinate['lat'] ?? 0.0;
+            $dati['lng'] = $coordinate['lng'] ?? 0.0;
+        }
 
         foreach ([1 => 'lun', 'mar', 'mer', 'gio', 'ven', 'sab', 'dom'] as $n => $colonna) {
             $dati[$colonna] = $this->ore[$n] === '' ? null : (int) $this->ore[$n];

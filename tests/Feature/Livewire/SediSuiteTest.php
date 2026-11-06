@@ -7,6 +7,7 @@ use App\Livewire\Sedi;
 use App\Models\User;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
@@ -200,6 +201,23 @@ class SediSuiteTest extends TestCase
         $this->assertSame(0.0, (float) DB::table('tc_sedi')->value('lat'));
         $this->assertSame(1, DB::table('_tracking')->where('action', 'Creazione sede Nuova')->count());
         $this->assertStringContainsString('senza coordinate', (string) session('avviso'));
+    }
+
+    public function test_save_without_coordinates_geocodes_the_address_when_the_service_is_configured(): void
+    {
+        config(['services.google_maps.key' => 'chiave']);
+        Http::fake(['maps.googleapis.com/*' => Http::response(['results' => [['geometry' => ['location' => ['lat' => 44.65, 'lng' => 10.93]]]]])]);
+        $c = $this->cliente();
+        DB::table('_comuni')->insert(['id' => 1, 'comune' => 'Modena', 'sigla_provincia' => 'MO', 'id_provincia' => 1]);
+
+        Livewire::actingAs($this->admin())->test(SedeForm::class)
+            ->set('f.cliente_id', $c)->set('f.descrizione', 'Nuova')->set('f.indirizzo', 'Via Roma 1')->set('f.cap', '41100')->set('f.citta', 'Modena')->set('f.provincia', 'MO')
+            ->call('salva')->assertHasNoErrors();
+
+        $this->assertSame(44.65, (float) DB::table('tc_sedi')->value('lat'));
+        $this->assertSame(10.93, (float) DB::table('tc_sedi')->value('lng'));
+        Http::assertSent(fn ($r) => $r['address'] === 'Via Roma 1 41100 Modena');
+        $this->assertNull(session('avviso'));
     }
 
     private function creaSchema(): void

@@ -2,6 +2,7 @@
 
 namespace App\Livewire;
 
+use App\Models\Legacy\Tracking;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -50,7 +51,7 @@ class Profilo extends Component
             'name' => 'required|string|max:30',
             'cognome' => 'required|string|max:30',
             'email' => ['required', 'email', 'max:40', Rule::unique('tc_admin', 'email')->ignore($user->id)],
-            'cellulare' => 'nullable|string|max:20',
+            'cellulare' => 'required|regex:/^\s*[+-]?\d+\s*$/|max:20',
             'foto' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
         ]);
 
@@ -70,6 +71,7 @@ class Profilo extends Component
         }
 
         $user->update($aggiornamenti);
+        Tracking::registra('Modifica Profilo '.$user->user);
         session()->flash('profilo', 'Profilo aggiornato.');
     }
 

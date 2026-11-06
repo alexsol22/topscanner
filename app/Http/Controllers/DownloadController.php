@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Legacy\Admin;
 use App\Models\Legacy\Cliente;
+use App\Models\Legacy\Config;
 use App\Models\Legacy\Documento;
 use App\Models\Legacy\DocumentoView;
 use App\Models\Legacy\Gda;
@@ -11,6 +12,7 @@ use App\Models\Legacy\Postazione;
 use App\Models\Legacy\Sede;
 use App\Models\Legacy\Turno;
 use App\Models\User;
+use App\Services\RegistroGda;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -76,6 +78,28 @@ class DownloadController extends Controller
         abort_unless($user->foto_path && Storage::disk(config('filesystems.files_disk'))->exists($percorso), 404);
 
         return Storage::disk(config('filesystems.files_disk'))->response($percorso, null, ['Cache-Control' => 'private, max-age=3600']);
+    }
+
+    /** Registro GDA di un cliente/sede: pagina A4 orizzontale da stampare o salvare in PDF (actionStampa di Yii). */
+    public function stampaGda(Request $request, RegistroGda $registro)
+    {
+        $user = auth()->user();
+        $visibili = Cliente::visibiliA($user);
+
+        $sede = $request->integer('sede') ?: null;
+        $idCliente = $request->integer('cliente') ?: null;
+        $idCliente ??= $sede ? Sede::whereKey($sede)->value('id_cliente') : null;
+        $idCliente ??= $user->isCliente() ? $user->id_cliente : null;
+
+        abort_unless($idCliente, 422, 'Seleziona un cliente o una sede.');
+
+        $cliente = (clone $visibili)->with(['comune', 'provincia'])->findOrFail($idCliente);
+
+        return view('stampe.gda', [
+            'azienda' => Config::first(),
+            'cliente' => $cliente,
+            'turni' => $registro->turni($user, $request->date('da'), $request->date('a'), $cliente->id, $sede, $request->integer('operatore') ?: null),
+        ]);
     }
 
     public function presenze(Request $request)

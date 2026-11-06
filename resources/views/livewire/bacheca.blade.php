@@ -19,7 +19,11 @@
             <p class="mt-3 whitespace-pre-line text-sm text-slate-700">{{ $a->testo }}</p>
             <div class="mt-4 flex gap-2">
                 @if (auth()->user()->isOperatore() && ! $a->letto)<button wire:click="segnaLetto({{ $a->id }})" class="btn-soft !px-3 !py-1.5">Segna come letto</button>@endif
-                @if (auth()->user()->isStaff())<button wire:click="elimina({{ $a->id }})" wire:confirm="Eliminare l'avviso?" class="btn-danger !px-3 !py-1.5">Elimina</button>@endif
+                @if (auth()->user()->isStaff())
+                    <button wire:click="mostraVisti({{ $a->id }})" class="btn-soft !px-3 !py-1.5">Visti</button>
+                    <button wire:click="modifica({{ $a->id }})" class="btn-soft !px-3 !py-1.5">Modifica</button>
+                    <button wire:click="elimina({{ $a->id }})" wire:confirm="Eliminare l'avviso?" class="btn-danger !px-3 !py-1.5">Elimina</button>
+                @endif
             </div>
         </article>
     @empty
@@ -27,7 +31,7 @@
     @endforelse
 
     @if ($modal)
-        <x-ui.modal title="Nuovo avviso">
+        <x-ui.modal :title="$modificaId ? 'Modifica avviso' : 'Nuovo avviso'">
             <form wire:submit="salva" class="space-y-4">
                 <x-ui.field label="Titolo" name="f.titolo"><input wire:model="f.titolo" class="input"></x-ui.field>
                 <x-ui.field label="Testo" name="f.testo"><textarea wire:model="f.testo" rows="5" class="input"></textarea></x-ui.field>
@@ -40,9 +44,25 @@
                 @endunless
                 <div class="flex justify-end gap-2">
                     <button type="button" wire:click="$set('modal', false)" class="btn-soft">Annulla</button>
-                    <button class="btn-primary">Pubblica</button>
+                    <button class="btn-primary">{{ $modificaId ? 'Salva' : 'Pubblica' }}</button>
                 </div>
             </form>
+        </x-ui.modal>
+    @endif
+
+    @if ($vistiId)
+        <x-ui.modal title="Visualizzazioni" close="chiudiVisti">
+            <div class="overflow-x-auto"><table class="min-w-full divide-y divide-sky-50">
+                <thead class="bg-sky-50/60"><tr><th class="th">Operatore</th><th class="th">Visto</th></tr></thead>
+                <tbody class="divide-y divide-sky-50">
+                    @forelse ($vistiElenco as $v)
+                        <tr><td class="td">{{ $v->operatore?->codice }} ({{ $v->operatore?->cognome }} {{ $v->operatore?->nome }})</td><td class="td">{{ $v->visto ? 'Visto il '.$v->data_vista?->format('d-m-Y H:i') : '' }}</td></tr>
+                    @empty
+                        <tr><td colspan="2" class="td text-center text-slate-500">Nessun destinatario.</td></tr>
+                    @endforelse
+                </tbody>
+            </table></div>
+            <div class="mt-5 flex justify-end"><button type="button" wire:click="chiudiVisti" class="btn-soft">Chiudi</button></div>
         </x-ui.modal>
     @endif
 </div>

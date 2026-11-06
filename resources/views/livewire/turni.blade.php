@@ -85,6 +85,19 @@
                         </ul>
                     </div>
                 </div>
+                @if ($staff)
+                    <div>
+                        <label class="label" for="filtro-cliente">Cliente</label>
+                        <select id="filtro-cliente" wire:model.live="filtroCliente" class="input"><option value="">Tutti i clienti</option>@foreach ($clienti as $c)<option value="{{ $c->id }}">{{ $c->ragione_sociale }}</option>@endforeach</select>
+                    </div>
+                @endif
+                <div>
+                    <label class="label" for="filtro-stato">Stato</label>
+                    <select id="filtro-stato" wire:model.live="filtroStato" class="input">
+                        <option value="">Tutti gli stati</option>
+                        @foreach (\App\Models\Legacy\Turno::etichette() as $chiave => [$etichettaStato])<option value="{{ $chiave }}">{{ $etichettaStato }}</option>@endforeach
+                    </select>
+                </div>
             @endunless
         </div>
         <div class="flex items-center gap-2">
@@ -92,7 +105,7 @@
                 <button wire:click="$set('vista', 'calendario')" class="rounded-lg px-3 py-1.5 text-sm font-semibold {{ $vista === 'calendario' ? 'bg-sky-500 text-white' : 'text-slate-600' }}">Calendario</button>
                 <button wire:click="$set('vista', 'lista')" class="rounded-lg px-3 py-1.5 text-sm font-semibold {{ $vista === 'lista' ? 'bg-sky-500 text-white' : 'text-slate-600' }}">Lista</button>
             </div>
-            @if ($staff) <button wire:click="nuovo" class="btn-primary">+ Nuovo turno</button> @endif
+            @if ($staff) <button wire:click="nuovoInvio" class="btn-soft">✉ Invia turni</button> <button wire:click="nuovo" class="btn-primary">+ Nuovo turno</button> @endif
         </div>
     </div>
 
@@ -172,6 +185,10 @@
         </div>
     @endif
 
+    @if ($vista === 'lista' && $totali)
+        <div class="card p-5"><p class="label">Totale ore previste ({{ $totali['etichetta'] }})</p><p class="text-2xl font-bold text-sky-600">{{ $totali['ore'] }}</p></div>
+    @endif
+
     @if ($vista === 'lista')
     <div class="card overflow-hidden"><div class="overflow-x-auto">
         <table class="min-w-full divide-y divide-sky-100">
@@ -196,8 +213,8 @@
                         <td class="td">{{ $t->ore }}@if ($t->ore_lavorate !== null) <span class="text-xs text-slate-500">({{ $t->ore_lavorate }} lav.)</span>@endif</td>
                         <td class="td"><span class="whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold {{ $cl }}">{{ $et }}</span></td>
                         @if ($staff)
-                            <td class="td text-center">@if ($t->stato === 'P')<button wire:click="apriChiudi({{ $t->id }})" wire:confirm="Registrare manualmente l'inizio del turno?" class="btn-soft !px-3 !py-1.5">Inizia</button>@endif</td>
-                            <td class="td text-center">@if ($t->stato === 'I')<button wire:click="apriChiudi({{ $t->id }})" wire:confirm="Registrare manualmente la fine del turno?" class="btn-soft !px-3 !py-1.5">Chiudi</button>@endif</td>
+                            <td class="td text-center">@if ($t->stato === 'P' && $t->inizio->lt(now()))<button wire:click="apriChiudi({{ $t->id }})" class="btn-soft !px-3 !py-1.5">Inizia</button>@endif</td>
+                            <td class="td text-center">@if ($t->stato === 'I' && $t->fine->lt(now()))<button wire:click="apriChiudi({{ $t->id }})" class="btn-soft !px-3 !py-1.5">Chiudi</button>@endif</td>
                             <td class="td text-center"><button wire:click="modifica({{ $t->id }})" class="btn-soft !px-3 !py-1.5">Mod</button></td>
                             <td class="td text-center"><button wire:click="elimina({{ $t->id }})" wire:confirm="Eliminare il turno?" class="btn-danger !px-3 !py-1.5">Can</button></td>
                         @endif
@@ -237,6 +254,40 @@
                 <div class="flex justify-end gap-2 sm:col-span-2">
                     <button type="button" wire:click="$set('modal', false)" class="btn-soft">Chiudi</button>
                     <button class="btn-primary">Crea turno</button>
+                </div>
+            </form>
+        </x-ui.modal>
+    @endif
+
+    @if ($ac)
+        <x-ui.modal title="{{ $ac['stato'] === 'I' ? 'Inizia turno' : 'Chiudi turno' }}" close="annullaApriChiudi">
+            <form wire:submit="confermaApriChiudi" class="space-y-4">
+                <x-ui.field label="Note" name="ac.note"><textarea wire:model="ac.note" rows="4" class="input" placeholder="Nota di inizio / chiusura turno"></textarea></x-ui.field>
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <x-ui.field label="{{ $ac['stato'] === 'I' ? 'Data inizio' : 'Data fine' }}" name="ac.data"><input type="date" wire:model="ac.data" class="input"></x-ui.field>
+                    <x-ui.field label="{{ $ac['stato'] === 'I' ? 'Ora inizio' : 'Ora fine' }}" name="ac.ora"><input type="time" wire:model="ac.ora" class="input"></x-ui.field>
+                </div>
+                <div class="flex justify-end gap-2">
+                    <button type="button" wire:click="annullaApriChiudi" class="btn-soft">Annulla</button>
+                    <button class="btn-primary">Conferma</button>
+                </div>
+            </form>
+        </x-ui.modal>
+    @endif
+
+    @if ($modalInvio)
+        <x-ui.modal title="Invia turni agli operatori" close="chiudiInvio" wide>
+            <form wire:submit="inviaTurni" class="grid gap-4 sm:grid-cols-2">
+                <x-ui.field label="Cliente" name="invio.cliente"><select wire:model="invio.cliente" class="input"><option value="">Tutti</option>@foreach ($clienti as $c)<option value="{{ $c->id }}">{{ $c->ragione_sociale }}</option>@endforeach</select></x-ui.field>
+                <x-ui.field label="Sede" name="invio.sede"><select wire:model="invio.sede" class="input"><option value="">Tutte</option>@foreach ($sediInvio as $s)<option value="{{ $s->id }}">{{ $s->descrizione }}</option>@endforeach</select></x-ui.field>
+                <x-ui.field label="Operatore" name="invio.operatore" class="sm:col-span-2"><select wire:model="invio.operatore" class="input"><option value="">Tutti</option>@foreach ($operatoriInvio as $o)<option value="{{ $o->id }}">{{ $o->nome_completo }}</option>@endforeach</select></x-ui.field>
+                <x-ui.field label="Turni dal" name="invio.inizio"><input type="date" wire:model="invio.inizio" class="input"></x-ui.field>
+                <x-ui.field label="Turni al" name="invio.fine"><input type="date" wire:model="invio.fine" class="input"></x-ui.field>
+                <x-ui.field label="Testo email" name="invio.testo" class="sm:col-span-2"><textarea wire:model="invio.testo" rows="3" class="input"></textarea></x-ui.field>
+                @if ($esitoInvio) <p class="rounded-xl bg-sky-50 p-3 text-sm text-slate-700 sm:col-span-2">{{ $esitoInvio }}</p> @endif
+                <div class="flex justify-end gap-2 sm:col-span-2">
+                    <button type="button" wire:click="chiudiInvio" class="btn-soft">Chiudi</button>
+                    <button class="btn-primary">Invia</button>
                 </div>
             </form>
         </x-ui.modal>

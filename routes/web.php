@@ -1,14 +1,21 @@
 <?php
 
 use App\Http\Controllers\DownloadController;
+use App\Http\Controllers\SmsConsegnaController;
 use App\Livewire;
+use App\Models\Legacy\Tracking;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/login', Livewire\Login::class)->name('login')->middleware('guest');
+Route::match(['get', 'post'], '/sms/consegna', SmsConsegnaController::class)->name('sms.consegna');
 Route::get('/recupera-password', Livewire\RecuperaPassword::class)->name('password.recupero')->middleware('guest');
 
 Route::post('/logout', function () {
+    if (Auth::check()) {
+        Tracking::registra('Uscita utente ');
+    }
+
     Auth::logout();
     request()->session()->invalidate();
     request()->session()->regenerateToken();
@@ -44,6 +51,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/postazioni/{postazione}/immagine', [DownloadController::class, 'immaginePostazione'])->name('postazioni.immagine');
         Route::get('/turni', Livewire\Turni::class)->name('turni');
         Route::get('/presenze', Livewire\Presenze::class)->name('presenze');
+        Route::get('/presenze/stampa', [DownloadController::class, 'stampaGda'])->name('presenze.stampa');
         Route::get('/presenze/esporta', [DownloadController::class, 'presenze'])->name('presenze.esporta');
         Route::get('/presenze/ore/{tipo}/{id}', [DownloadController::class, 'oreTurni'])->whereIn('tipo', ['cliente', 'operatore'])->whereNumber('id')->name('presenze.ore');
     });

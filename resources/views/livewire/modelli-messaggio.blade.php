@@ -88,6 +88,16 @@
                     <input id="modello-admin-email" wire:model="f.admin_email" class="input">
                     @error('f.admin_email') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
                 </div>
+                <div>
+                    <label for="modello-numero-sms" class="label">Numero invii SMS</label>
+                    <select id="modello-numero-sms" wire:model="f.numero_sms" class="input">@foreach ([1, 2, 3] as $n)<option value="{{ $n }}">{{ $n }}</option>@endforeach</select>
+                    @error('f.numero_sms') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
+                </div>
+                <div>
+                    <label for="modello-numero-email" class="label">Numero invii email</label>
+                    <select id="modello-numero-email" wire:model="f.numero_email" class="input">@foreach ([1, 2, 3] as $n)<option value="{{ $n }}">{{ $n }}</option>@endforeach</select>
+                    @error('f.numero_email') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
+                </div>
                 <div class="sm:col-span-3">
                     <label for="modello-admin-sms" class="label">Numeri SMS amministrazione</label>
                     <input id="modello-admin-sms" wire:model="f.admin_sms" class="input">

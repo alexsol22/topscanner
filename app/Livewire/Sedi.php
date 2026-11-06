@@ -39,6 +39,11 @@ class Sedi extends Component
 
     public array $p = ['titolo' => '', 'minuti_passaggio' => ''];
 
+    public function mount(): void
+    {
+        Tracking::registra('Visualizzazione elenco Sedi ');
+    }
+
     public function updatingCerca(): void
     {
         $this->resetPage();

@@ -12,13 +12,18 @@
         @endunless
     </div>
 
-    <div class="grid grid-cols-3 gap-4">
-        <div class="card p-5"><p class="label">Ore previste</p><p class="text-2xl font-bold text-sky-600">{{ $previste }}</p></div>
-        <div class="card p-5"><p class="label">Ore lavorate</p><p class="text-2xl font-bold text-emerald-600">{{ $lavorate }}</p></div>
-        <div class="card p-5"><p class="label">Saldo</p><p class="text-2xl font-bold {{ $lavorate - $previste < 0 ? 'text-rose-600' : 'text-slate-800' }}">{{ $lavorate - $previste }}</p></div>
-    </div>
+    @if ($totali)
+        <div class="grid grid-cols-3 gap-4">
+            <div class="card p-5"><p class="label">Totale ore previste ({{ $totali['etichetta'] }})</p><p class="text-2xl font-bold text-sky-600">{{ $totali['previste'] }}</p></div>
+            <div class="card p-5"><p class="label">Totale ore lavorate</p><p class="text-2xl font-bold text-emerald-600">{{ $totali['lavorate'] }}</p></div>
+            <div class="card p-5"><p class="label">Totale saldo</p><p class="text-2xl font-bold {{ $totali['saldo'] > 0 ? 'text-emerald-600' : 'text-rose-600' }}">{{ $totali['saldo'] }}</p></div>
+        </div>
+    @endif
 
     <div class="flex justify-end">
+        @if ($filtroCliente || $filtroSede || auth()->user()->isCliente())
+            <a href="{{ route('presenze.stampa', ['da' => $da, 'a' => $a, 'sede' => $filtroSede, 'cliente' => $filtroCliente]) }}" target="_blank" rel="noopener" class="btn-soft mr-2">🖨 Stampa GDA</a>
+        @endif
         <a href="{{ route('presenze.esporta', ['da' => $da, 'a' => $a, 'sede' => $filtroSede]) }}" class="btn-soft">⬇ Esporta CSV</a>
     </div>
 
@@ -58,6 +63,65 @@
                 </tbody>
             </table></div>
         </div>
+    @endif
+
+    @php($staff = auth()->user()->isStaff())
+    <div class="card overflow-hidden">
+        <div class="border-b border-sky-100 px-5 py-4 font-semibold text-slate-800">Giornale delle attività (turni completati)</div>
+        <div class="overflow-x-auto"><table class="min-w-full divide-y divide-sky-50">
+            <thead class="bg-sky-50/60"><tr>
+                @unless (auth()->user()->isCliente())<th class="th">Cliente</th>@endunless
+                <th class="th">Sede</th><th class="th">Operatore</th><th class="th">Inizio turno</th><th class="th">Fine turno</th>
+                <th class="th">Ore previste</th><th class="th">Ore lavorate</th><th class="th">Note operatore</th><th class="th">Passaggi</th>
+                @if ($staff)<th class="th">Distanza</th><th class="th">Ritardo</th>@endif
+            </tr></thead>
+            <tbody class="divide-y divide-sky-50">
+                @forelse ($turniGda as $t)
+                    @php($inizioGda = $t->presenze->firstWhere('tipo', 'I'))
+                    @php($fineGda = $t->presenze->firstWhere('tipo', 'F'))
+                    @php($passaggi = $t->presenze->where('tipo', 'P'))
+                    <tr wire:key="gda{{ $t->id }}">
+                        @unless (auth()->user()->isCliente())<td class="td">{{ $t->cliente?->ragione_sociale }}</td>@endunless
+                        <td class="td">{{ $t->sede?->descrizione }}</td>
+                        <td class="td">{{ $t->operatore?->nome_completo }}</td>
+                        <td class="td whitespace-nowrap">@if ($inizioGda){{ $inizioGda->data?->format('d-m-Y') }}<br>Ore: {{ $inizioGda->orario }}@endif</td>
+                        <td class="td whitespace-nowrap">@if ($fineGda){{ $fineGda->data?->format('d-m-Y') }}<br>Ore: {{ $fineGda->orario }}@endif</td>
+                        <td class="td">{{ $t->ore }}</td>
+                        <td class="td font-semibold {{ $staff && $t->ore > $t->ore_lavorate ? 'text-rose-600' : ($staff && $t->ore < $t->ore_lavorate ? 'text-emerald-600' : '') }}">{{ $t->ore_lavorate }}</td>
+                        <td class="td text-sm">
+                            @if ($inizioGda && $inizioGda->note_operatore)<p><b>Inizio turno:</b> {{ $inizioGda->note_operatore }}</p>@endif
+                            @if ($fineGda && $fineGda->note_operatore)<p><b>Fine turno:</b> {{ $fineGda->note_operatore }}</p>@endif
+                        </td>
+                        <td class="td">@if ($passaggi->isNotEmpty())<button type="button" wire:click="mostraPassaggi({{ $t->id }})" class="btn-soft !px-3 !py-1.5" title="Visualizza passaggi">Passaggi ({{ $passaggi->count() }})</button>@endif</td>
+                        @if ($staff)
+                            <td class="td whitespace-nowrap">{{ $inizioGda && $inizioGda->distanza > 0 ? $inizioGda->distanza.' Km' : '' }}</td>
+                            <td class="td whitespace-nowrap">{{ $inizioGda && $inizioGda->ritardo > 0 ? $inizioGda->ritardo.' Min' : '' }}</td>
+                        @endif
+                    </tr>
+                @empty
+                    <tr><td colspan="11" class="td py-10 text-center text-slate-500">Nessun turno completato nel periodo.</td></tr>
+                @endforelse
+            </tbody>
+        </table></div>
+    </div>
+    {{ $turniGda->links() }}
+
+    @if ($turnoPassaggi)
+        <x-ui.modal title="Passaggi postazioni — {{ $turnoPassaggi->sede?->descrizione }}" close="chiudiPassaggi">
+            <div class="overflow-x-auto"><table class="min-w-full divide-y divide-sky-50">
+                <thead class="bg-sky-50/60"><tr><th class="th">Postazione</th><th class="th">Orario</th><th class="th">Note operatore</th>@if ($staff)<th class="th">Ritardo</th>@endif</tr></thead>
+                <tbody class="divide-y divide-sky-50">
+                    @foreach ($turnoPassaggi->presenze->where('tipo', 'P') as $p)
+                        <tr>
+                            <td class="td">{{ $p->postazione?->titolo }}</td>
+                            <td class="td whitespace-nowrap">{{ $p->data?->format('d-m-Y') }}<br>Ore {{ $p->orario }}</td>
+                            <td class="td">{{ $p->note_operatore }}</td>
+                            @if ($staff)<td class="td">{{ $p->ritardo > 0 ? $p->ritardo.' Min' : '' }}</td>@endif
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table></div>
+        </x-ui.modal>
     @endif
 
     <div class="card overflow-hidden">

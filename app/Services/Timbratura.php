@@ -70,8 +70,9 @@ class Timbratura
         }
 
         $sede = $turno->sede;
-        $km = $lat !== null && $lng !== null && $sede
-            ? Calcoli::distanzaKm($lat, $lng, (float) $sede->lat, (float) $sede->lng)
+        // Come Yii: senza coordinate la posizione vale (0, 0), quindi il QR sede viene rifiutato per distanza.
+        $km = $sede
+            ? Calcoli::distanzaKm($lat ?? 0.0, $lng ?? 0.0, (float) $sede->lat, (float) $sede->lng)
             : 0.0;
 
         if ($cod->tipo === 'S' && ($km * 1000) > (float) $sede?->distanza) {

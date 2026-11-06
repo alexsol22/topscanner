@@ -7,6 +7,7 @@ use App\Models\Legacy\Admin;
 use App\Models\Legacy\Certificato;
 use App\Models\Legacy\Documento;
 use App\Models\Legacy\DocumentoView;
+use App\Models\Legacy\Tracking;
 use Illuminate\Database\Eloquent\Builder;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -35,6 +36,11 @@ class Documenti extends Component
     public array $f = [];
 
     public $file;
+
+    public function mount(): void
+    {
+        Tracking::registra('Visualizzazione elenco documenti ');
+    }
 
     public function updatedFiltroCliente(): void
     {

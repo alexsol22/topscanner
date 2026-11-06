@@ -277,12 +277,22 @@ class ClientiOperatoriSuiteTest extends TestCase
     public function test_operator_create_validation_and_unique_email(): void
     {
         $this->operatore('Mario', 'Rossi', 'dup@t.it');
-        $casi = [['f.name', ''], ['f.cognome', ''], ['f.email', 'x'], ['f.email', 'dup@t.it'], ['f.codice', ''], ['f.colore', 'rosso'], ['f.costo_orario', '-1'], ['f.password', 'corta'], ['f.ruolo', 'boh']];
+        $casi = [['f.name', ''], ['f.cognome', ''], ['f.email', 'x'], ['f.email', 'dup@t.it'], ['f.cellulare', ''], ['f.cellulare', '33a'], ['f.codice', ''], ['f.colore', 'rosso'], ['f.costo_orario', '-1'], ['f.password', 'corta'], ['f.ruolo', 'boh']];
         foreach ($casi as [$campo, $valore]) {
             Livewire::actingAs($this->admin())->test(Operatori::class)->call('nuovo')
                 ->set('f', $this->datiOperatore())->set($campo, $valore)->call('salva')->assertHasErrors([$campo]);
         }
         $this->assertSame(2, DB::table('tc_admin')->where('user_type', 4)->count());
+    }
+
+    public function test_operator_creation_emails_credentials_and_is_tracked(): void
+    {
+        Livewire::actingAs($this->admin())->test(Operatori::class)->call('nuovo')
+            ->set('f', $this->datiOperatore())->call('salva')->assertHasNoErrors();
+
+        Mail::assertSentCount(1);
+        $this->assertSame(1, DB::table('_tracking')->where('action', 'Nuovo operatore anna@t.it')->count());
+        $this->assertSame(1, DB::table('_tracking')->where('action', 'Visualizzazione elenco operatori ')->count());
     }
 
     public function test_operator_create_edit_and_email_unique_ignores_self(): void
@@ -443,6 +453,16 @@ class ClientiOperatoriSuiteTest extends TestCase
 
     private function creaSchema(): void
     {
+        Schema::create('_tracking', function (Blueprint $table): void {
+            $table->unsignedInteger('id')->primary();
+            $table->unsignedInteger('id_user')->nullable();
+            $table->string('addr')->nullable();
+            $table->string('host')->nullable();
+            $table->string('agent')->nullable();
+            $table->string('pagina')->nullable();
+            $table->dateTime('data_view')->nullable();
+            $table->text('action')->nullable();
+        });
         Schema::create('tc_admin', function (Blueprint $table): void {
             $table->increments('id');
             $table->unsignedInteger('user_type')->nullable();

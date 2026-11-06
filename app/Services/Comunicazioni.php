@@ -3,7 +3,11 @@
 namespace App\Services;
 
 use App\Mail\NotificaHtml;
+use App\Models\Legacy\Cliente;
 use App\Models\Legacy\Email;
+use App\Models\Legacy\Messaggio;
+use App\Models\Legacy\SendEmail;
+use App\Models\User;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -13,6 +17,8 @@ use Throwable;
 /** Invio email automatiche: porting di MyEmailsNative / MyUtils::getTextMessage (Yii). */
 class Comunicazioni
 {
+    public function __construct(private ?Sms $sms = null) {}
+
     /** @param  array<string, mixed>  $dati */
     public function testo(?string $modello, array $dati): string
     {
@@ -91,5 +97,92 @@ class Comunicazioni
         }
 
         return $inviate;
+    }
+
+    /**
+     * Come nei job Yii: SMS all'operatore e poi a ogni numero di admin_sms del modello (solo se invia_sms è attivo).
+     *
+     * @param  array<string, mixed>  $dati
+     */
+    public function inviaSms(Messaggio $config, array $dati, ?string $cellulare, int $idOperatore): void
+    {
+        if (! $config->invia_sms || ! $cellulare) {
+            return;
+        }
+
+        $sms = $this->sms ??= app(Sms::class);
+        $testo = $this->testo($config->modello_sms, $dati);
+        $mittente = (string) $config->mittente;
+
+        $sms->invia($cellulare, $testo, $mittente, $idOperatore);
+
+        foreach (explode(',', (string) $config->admin_sms) as $numero) {
+            $sms->invia($numero, $testo, $mittente, $idOperatore);
+        }
+    }
+
+    /** Come MyEmailsNative::sendEmailAccessi: credenziali provvisorie di un nuovo account (non registrate in tc_email per non salvare la password). */
+    public function inviaCredenziali(string $nome, string $utente, string $email, string $password): bool
+    {
+        try {
+            Mail::to($email, $nome ?: null)->send(new NotificaHtml(
+                'Area Riservata',
+                view('emails.credenziali-accesso', ['nome' => $nome, 'utente' => $utente, 'password' => $password])->render(),
+                ['etichetta' => 'Accedi all\'area riservata', 'url' => route('login')],
+            ));
+        } catch (Throwable $e) {
+            report($e);
+
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Come Turni::sendEmailTurni (Yii): una email di promemoria per operatore con i suoi turni filtrati,
+     * accodata in tc_send_email e spedita dal comando notifiche:ritardi.
+     *
+     * @param  array{operatore?: ?int, sede?: ?int, cliente?: ?int, inizio?: ?string, fine?: ?string}  $filtri
+     * @return array{codice: int, operatori: int}|null null se nessun turno corrisponde ai filtri
+     */
+    public function accodaPromemoriaTurni(User $utente, array $filtri, string $modello): ?array
+    {
+        $turni = $this->turni()
+            ->whereIn('t.id_cliente', Cliente::visibiliA($utente)->select('tc_clienti.id'))
+            ->when($filtri['operatore'] ?? null, fn ($q, $id) => $q->where('t.id_operatore', $id))
+            ->when($filtri['sede'] ?? null, fn ($q, $id) => $q->where('t.id_sede', $id))
+            ->when($filtri['cliente'] ?? null, fn ($q, $id) => $q->where('t.id_cliente', $id))
+            ->when($filtri['inizio'] ?? null, fn ($q, $data) => $q->where('t.data_inizio', '>=', $data))
+            ->when($filtri['fine'] ?? null, fn ($q, $data) => $q->where('t.data_inizio', '<=', $data))
+            ->get();
+
+        if ($turni->isEmpty()) {
+            return null;
+        }
+
+        $codice = time();
+        $perOperatore = $turni->groupBy('id_operatore');
+
+        foreach ($perOperatore as $idOperatore => $righe) {
+            $operatore = $righe->first();
+            $nome = trim("{$operatore->cognome} {$operatore->nome}");
+            $testo = "<p>Ciao {$nome} Qui di seguito un promemoria dei tuoi prossimi turni </p>";
+
+            foreach ($righe as $riga) {
+                $testo .= "<p style='margin-bottom:15px'>".$this->testo($modello, (array) $riga + ['giorno' => $riga->inizio, 'orario' => $riga->ora_inizio]).'</p>';
+            }
+
+            SendEmail::create([
+                'code' => $codice,
+                'email' => $operatore->email,
+                'nome' => $nome,
+                'id_operatore' => $idOperatore,
+                'testo' => $testo,
+                'sent' => 'N',
+            ]);
+        }
+
+        return ['codice' => $codice, 'operatori' => $perOperatore->count()];
     }
 }

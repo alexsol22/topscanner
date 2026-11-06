@@ -49,6 +49,7 @@
 
     @if ($canale === 'sms')
             <section aria-label="SMS inviati" class="card overflow-hidden">
+                @if ($crediti !== null)<p class="border-b border-sky-100 px-5 py-3 text-sm text-slate-600">Credito residuo: <b class="text-sky-600">{{ $crediti }} &euro;</b></p>@endif
                 <div class="overflow-x-auto">
                     <table class="min-w-full divide-y divide-sky-100">
                         <thead class="bg-sky-50/60">

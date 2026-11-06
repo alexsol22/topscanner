@@ -3,7 +3,6 @@
 namespace App\Livewire;
 
 use App\Livewire\Concerns\ConAccesso;
-use App\Mail\NotificaHtml;
 use App\Models\Legacy\Admin;
 use App\Models\Legacy\Cliente;
 use App\Models\Legacy\Comune;
@@ -11,9 +10,10 @@ use App\Models\Legacy\Documento;
 use App\Models\Legacy\OperatoreEscludi;
 use App\Models\Legacy\OperatorePreferito;
 use App\Models\Legacy\Provincia;
+use App\Models\Legacy\Tracking;
+use App\Services\Comunicazioni;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -98,6 +98,8 @@ class Clienti extends Component
     /** Dopo un refresh il form riapre lo stesso record (stato preso dall'URL). */
     public function mount(): void
     {
+        Tracking::registra('Visualizzazione elenco clienti ');
+
         if (! $this->modal) {
             return;
         }
@@ -216,6 +218,8 @@ class Clienti extends Component
             $cliente = Cliente::create($dati + ['pos' => '', 'lat' => 0, 'lng' => 0, 'isTest' => (int) auth()->user()->user_type === 1 ? 1 : null]);
         }
 
+        Tracking::registra(($this->clienteId ? 'Aggiornamento dati cliente ' : 'Creazione cliente ').$cliente->ragione_sociale);
+
         $this->salvaOperatori($cliente->id);
 
         if ($dati['accesso'] === 'Y') {
@@ -252,22 +256,13 @@ class Clienti extends Component
     {
         [$admin, $password] = $account;
 
-        try {
-            Mail::to($admin->email, trim($admin->nome.' '.$admin->cognome) ?: null)->send(new NotificaHtml(
-                'Area Riservata',
-                view('emails.credenziali-accesso', ['nome' => trim($admin->nome.' '.$admin->cognome), 'utente' => $admin->user, 'password' => $password])->render(),
-                ['etichetta' => 'Accedi all\'area riservata', 'url' => route('login')],
-            ));
-        } catch (\Throwable $e) {
-            report($e);
+        $inviata = app(Comunicazioni::class)->inviaCredenziali(trim($admin->nome.' '.$admin->cognome), (string) $admin->user, (string) $admin->email, $password);
 
-            return " Account creato, ma l'email con le credenziali non è stata inviata: usa «Password dimenticata?» dal login per generarne una nuova.";
-        }
-
-        return " Credenziali inviate a {$admin->email}.";
+        return $inviata
+            ? " Credenziali inviate a {$admin->email}."
+            : " Account creato, ma l'email con le credenziali non è stata inviata: usa «Password dimenticata?» dal login per generarne una nuova.";
     }
 
-    /** Come Yii (Clienti::removeRelated). */
     public function richiediEliminazione(int $id): void
     {
         $this->soloStaff();
@@ -310,6 +305,7 @@ class Clienti extends Component
         }
 
         $cliente->delete();
+        Tracking::registra('Rimozione cliente '.$cliente->ragione_sociale);
 
         Storage::disk(config('filesystems.files_disk'))->deleteDirectory(trim(config('filesystems.private_paths.documenti'), '/').'/Cliente_'.$cliente->id);
 

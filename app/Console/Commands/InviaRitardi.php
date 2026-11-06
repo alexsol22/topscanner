@@ -75,20 +75,20 @@ class InviaRitardi extends Command
 
             $notificati++;
 
-            if (! $config->invia_email) {
-                continue;
-            }
-
             $dati = (array) $turno + [
                 'giorno' => $inizio ? $turno->inizio : $turno->fine,
                 'orario' => $inizio ? $turno->ora_inizio : $turno->ora_fine,
             ];
+
+            $comunicazioni->inviaSms($config, $dati, $turno->cellulare, (int) $turno->id_operatore);
+
+            // Come in Yii, le email partono (operatore e admin) solo se l'operatore ha un indirizzo.
+            if (! $config->invia_email || ! $turno->email) {
+                continue;
+            }
             $testo = $comunicazioni->testo($config->modello_email, $dati);
             $destinatari = $comunicazioni->destinatari($config->admin_email);
-
-            if ($turno->email) {
-                $destinatari[$turno->email] = trim("{$turno->cognome} {$turno->nome}");
-            }
+            $destinatari[$turno->email] = trim("{$turno->cognome} {$turno->nome}");
 
             $comunicazioni->invia($destinatari, (string) $config->oggetto, $testo, (int) $turno->id_operatore);
         }

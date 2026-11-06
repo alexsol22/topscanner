@@ -16,7 +16,7 @@ class InviaAvvisoTurni extends Command
     {
         $config = Messaggio::find(1);
 
-        if (! $config?->invia_email) {
+        if (! $config) {
             return self::SUCCESS;
         }
 
@@ -31,11 +31,13 @@ class InviaAvvisoTurni extends Command
         $inviate = 0;
 
         foreach ($turni as $turno) {
-            if (! $turno->email) {
+            $dati = (array) $turno + ['giorno' => $turno->inizio, 'orario' => $turno->ora_inizio];
+
+            $comunicazioni->inviaSms($config, $dati, $turno->cellulare, (int) $turno->id_operatore);
+
+            if (! $config->invia_email || ! $turno->email) {
                 continue;
             }
-
-            $dati = (array) $turno + ['giorno' => $turno->inizio, 'orario' => $turno->ora_inizio];
 
             $inviate += $comunicazioni->invia(
                 [$turno->email => trim("{$turno->cognome} {$turno->nome}")],

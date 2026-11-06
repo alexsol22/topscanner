@@ -19,6 +19,10 @@ class Bacheca extends Component
 
     public array $destinatari = [];
 
+    public ?int $modificaId = null;
+
+    public ?int $vistiId = null;
+
     public function mount(): void
     {
         abort_if(auth()->user()->isCliente(), 403);
@@ -27,10 +31,34 @@ class Bacheca extends Component
     public function nuovo(): void
     {
         abort_unless(auth()->user()->isStaff(), 403);
+        $this->modificaId = null;
         $this->f = ['titolo' => '', 'testo' => '', 'per_tutti' => true];
         $this->destinatari = [];
         $this->resetValidation();
         $this->modal = true;
+    }
+
+    public function modifica(int $id): void
+    {
+        abort_unless(auth()->user()->isStaff(), 403);
+        $avviso = Legacy\Bacheca::findOrFail($id);
+
+        $this->modificaId = $avviso->id;
+        $this->f = ['titolo' => $avviso->titolo, 'testo' => $avviso->testo, 'per_tutti' => (bool) $avviso->tutti];
+        $this->destinatari = $avviso->tutti ? [] : BachecaView::where('id_bacheca', $id)->pluck('id_operatore')->map(fn ($v) => (string) $v)->all();
+        $this->resetValidation();
+        $this->modal = true;
+    }
+
+    public function mostraVisti(int $id): void
+    {
+        abort_unless(auth()->user()->isStaff(), 403);
+        $this->vistiId = Legacy\Bacheca::findOrFail($id)->id;
+    }
+
+    public function chiudiVisti(): void
+    {
+        $this->vistiId = null;
     }
 
     public function salva(): void
@@ -48,17 +76,39 @@ class Bacheca extends Component
             return;
         }
 
-        $avviso = Legacy\Bacheca::create([
-            'titolo' => $this->f['titolo'], 'testo' => $this->f['testo'],
-            'tutti' => $this->f['per_tutti'] ? 'Y' : 'N', 'data_invio' => today(),
-        ]);
+        $dati = ['titolo' => $this->f['titolo'], 'testo' => $this->f['testo'], 'tutti' => $this->f['per_tutti'] ? 'Y' : 'N'];
+
+        if ($this->modificaId) {
+            $avviso = Legacy\Bacheca::findOrFail($this->modificaId);
+            $avviso->update($dati);
+        } else {
+            $avviso = Legacy\Bacheca::create($dati + ['data_invio' => today()]);
+        }
+
         $ids = $this->f['per_tutti'] ? $this->operatoriAttivi()->pluck('id') : collect($this->destinatari);
+        $this->allineaVisualizzazioni($avviso, $ids);
+
+        $this->modal = false;
+        $this->modificaId = null;
+    }
+
+    /** Come Bacheca::addViews: aggiunge le visualizzazioni mancanti e toglie quelle degli operatori non più destinatari. */
+    private function allineaVisualizzazioni(Legacy\Bacheca $avviso, $ids): void
+    {
+        $ids = $ids->map(fn ($id) => (int) $id)->unique()->values();
         $avviso->update(['quanti' => $ids->count()]);
-        foreach ($ids as $id) {
+
+        if ($ids->isEmpty()) {
+            return;
+        }
+
+        $esistenti = BachecaView::where('id_bacheca', $avviso->id)->pluck('id_operatore')->map(fn ($id) => (int) $id);
+
+        foreach ($ids->diff($esistenti) as $id) {
             BachecaView::create(['id_bacheca' => $avviso->id, 'id_operatore' => $id]);
         }
 
-        $this->modal = false;
+        BachecaView::where('id_bacheca', $avviso->id)->whereNotIn('id_operatore', $ids)->delete();
     }
 
     public function segnaLetto(int $id): void
@@ -95,6 +145,9 @@ class Bacheca extends Component
         }
 
         return view('livewire.bacheca', [
+            'vistiElenco' => $this->vistiId && $u->isStaff()
+                ? BachecaView::with('operatore')->where('id_bacheca', $this->vistiId)->get()
+                : collect(),
             'avvisi' => $avvisi,
             'operatori' => $u->isStaff() ? $this->operatoriAttivi()->orderBy('cognome')->get() : collect(),
         ]);
