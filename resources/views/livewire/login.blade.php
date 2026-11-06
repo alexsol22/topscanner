@@ -1,135 +1,59 @@
-<main class="grid min-h-dvh bg-[#f1f8fb] lg:grid-cols-2">
-    <section class="relative flex min-h-dvh flex-col justify-center px-6 py-12 sm:px-12 lg:px-10 xl:px-16" aria-labelledby="login-title">
-        <div class="mx-auto w-full max-w-md rounded-3xl bg-white p-7 shadow-[0_24px_70px_rgba(21,43,56,0.08)] ring-1 ring-sky-100 sm:p-9">
-            <a href="{{ url('/') }}" class="mb-14 inline-flex items-center gap-3" aria-label="Omnia Control">
-                <img src="{{ asset('brand/omnia-control.svg') }}?v=2" alt="" class="h-11 w-11">
-                <span class="leading-none">
-                    <span class="block text-sm font-bold tracking-[0.18em] text-slate-800">OMNIA</span>
-                    <span class="mt-1.5 block text-[10px] font-semibold tracking-[0.25em] text-slate-500">CONTROL</span>
-                </span>
-            </a>
+<main class="flex min-h-dvh flex-col items-center justify-center bg-slate-50 px-4 py-10">
+    <div class="w-full max-w-sm">
+        <a href="{{ url('/') }}" class="mb-8 flex items-center justify-center gap-3" aria-label="Omnia Control">
+            <img src="{{ asset('brand/omnia-control.svg') }}?v=2" alt="" class="h-10 w-10">
+            <span class="leading-none">
+                <span class="block text-sm font-bold tracking-[0.2em] text-slate-800">OMNIA</span>
+                <span class="mt-1 block text-[10px] font-semibold tracking-[0.28em] text-slate-500">CONTROL</span>
+            </span>
+        </a>
 
-            <p class="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-sky-700">
-                <span class="h-1.5 w-1.5 rounded-full bg-[#d9784e]"></span>
-                Area operativa
-            </p>
-            <h1 id="login-title" class="text-3xl font-bold tracking-tight text-slate-800">Bentornato</h1>
-            <p class="mt-2 text-sm leading-6 text-slate-500">Turni, sedi e presenze: tutto riparte da qui.</p>
+        <section class="rounded-2xl bg-white p-7 shadow-sm ring-1 ring-slate-200 sm:p-8" aria-labelledby="login-title">
+            <h1 id="login-title" class="text-xl font-semibold tracking-tight text-slate-900">Accedi</h1>
+            <p class="mt-1 text-sm text-slate-500">Inserisci le tue credenziali per continuare.</p>
 
-            <form wire:submit="accedi" class="mt-8 space-y-5">
+            <form wire:submit="accedi" class="mt-6 space-y-4" novalidate>
+                @error('email')
+                    <div role="alert" class="flex items-start gap-2.5 rounded-lg bg-rose-50 px-3.5 py-3 text-sm text-rose-700 ring-1 ring-rose-100">
+                        <svg class="mt-0.5 h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm0-11.5a.9.9 0 01.9.9v3.2a.9.9 0 11-1.8 0V7.4a.9.9 0 01.9-.9zm0 7.6a1.1 1.1 0 100-2.2 1.1 1.1 0 000 2.2z" clip-rule="evenodd"/></svg>
+                        <span>{{ $message }}</span>
+                    </div>
+                @enderror
+
                 <div>
-                    <label class="label" for="email">Utente</label>
-                    <input id="email" type="text" wire:model="email" class="input !rounded-lg !px-3.5 !py-3" autocomplete="username">
-                    @error('email') <p class="mt-2 text-xs font-medium text-rose-600">{{ $message }}</p> @enderror
-                </div>
-                <div>
-                    <label class="label" for="password">Password</label>
-                    <input id="password" type="password" wire:model="password" class="input !rounded-lg !px-3.5 !py-3" autocomplete="current-password">
-                    @error('password') <p class="mt-2 text-xs font-medium text-rose-600">{{ $message }}</p> @enderror
+                    <label for="utente" class="mb-1.5 block text-sm font-medium text-slate-700">Utente</label>
+                    <input id="utente" type="text" wire:model="email" autocomplete="username" autocapitalize="none" spellcheck="false" autofocus
+                           class="block w-full rounded-lg border-0 bg-white px-3.5 py-2.5 text-sm text-slate-900 shadow-sm ring-1 ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-sky-600">
                 </div>
 
-                <label class="flex items-center gap-2.5 text-sm text-slate-600">
-                    <input type="checkbox" wire:model="remember" class="rounded border-sky-300 text-sky-600 focus:ring-sky-300">
-                    Ricordami
-                </label>
+                <div x-data="{ visibile: false }">
+                    <div class="mb-1.5 flex items-center justify-between">
+                        <label for="password" class="block text-sm font-medium text-slate-700">Password</label>
+                        <a href="{{ route('password.recupero') }}" wire:navigate class="text-xs font-medium text-sky-700 hover:text-sky-800 hover:underline">Password dimenticata?</a>
+                    </div>
+                    <div class="relative">
+                        <input id="password" :type="visibile ? 'text' : 'password'" wire:model="password" autocomplete="current-password"
+                               class="block w-full rounded-lg border-0 bg-white py-2.5 pl-3.5 pr-11 text-sm text-slate-900 shadow-sm ring-1 ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-sky-600">
+                        <button type="button" @click="visibile = !visibile" :aria-pressed="visibile" :aria-label="visibile ? 'Nascondi password' : 'Mostra password'"
+                                class="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-lg text-slate-400 hover:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-600">
+                            <svg x-show="!visibile" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M2.04 12.32a1 1 0 010-.64C3.42 7.51 7.36 4.5 12 4.5s8.58 3.01 9.96 7.18a1 1 0 010 .64C20.58 16.49 16.64 19.5 12 19.5s-8.58-3.01-9.96-7.18z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                            <svg x-show="visibile" x-cloak class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.22A10.48 10.48 0 001.93 12c1.29 4.17 5.2 7.2 9.82 7.2 1.9 0 3.69-.5 5.23-1.4M6.23 6.23A10.45 10.45 0 0112 4.8c4.62 0 8.53 3.03 9.82 7.2a10.5 10.5 0 01-4.29 5.77M6.23 6.23L3 3m3.23 3.23l3.65 3.65m7.89 7.89L21 21m-3.23-3.23l-3.65-3.65m0 0a3 3 0 10-4.24-4.24m4.24 4.24L9.88 9.88"/></svg>
+                        </button>
+                    </div>
+                    @error('password') <p class="mt-1.5 text-xs font-medium text-rose-600">{{ $message }}</p> @enderror
+                </div>
 
-                <button class="btn-primary w-full !rounded-lg !bg-sky-600 hover:!bg-sky-700" wire:loading.attr="disabled">
-                    <span wire:loading.remove>Accedi</span>
-                    <span wire:loading>Accesso in corso…</span>
+                <button type="submit" wire:loading.attr="disabled"
+                        class="flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-600 focus-visible:ring-offset-2 disabled:opacity-60">
+                    <span wire:loading.remove wire:target="accedi">Accedi</span>
+                    <span wire:loading wire:target="accedi">Accesso in corso…</span>
                 </button>
             </form>
+        </section>
 
-            <p class="mt-6 text-center text-sm">
-                <a href="{{ route('password.recupero') }}" wire:navigate class="font-medium text-sky-700 hover:text-sky-800 hover:underline">Password dimenticata?</a>
-            </p>
-        </div>
-
-        <p class="absolute bottom-6 left-6 text-[10px] font-medium uppercase tracking-[0.16em] text-slate-400 sm:left-12 lg:left-16 xl:left-24">Omnia Control <span class="px-1.5 text-[#d9784e]">·</span> Accesso riservato</p>
-    </section>
-
-    <aside class="relative hidden min-h-dvh overflow-hidden px-8 py-10 text-[#152b38] lg:block xl:px-14 xl:py-12" aria-label="Roadmap illustrata del servizio">
-        <svg aria-hidden="true" class="pointer-events-none absolute inset-0 h-full w-full text-sky-200/50" viewBox="0 0 760 1000" preserveAspectRatio="xMidYMid slice" fill="none">
-            <path d="M0 164h220l42 42h155M0 276h152l54-52h211M0 642h180l62-62h166M0 760h236l52-48h120M760 144h-184l-48 48h-190M760 286h-154l-48-46h-220M760 618h-190l-48 48h-184M760 752h-225l-50-48h-155" stroke="currentColor" stroke-width="2"/>
-            <path d="M94 0v1000M170 0v1000M650 0v1000M730 0v1000" stroke="currentColor"/>
-        </svg>
-
-        <div class="relative mx-auto flex min-h-[calc(100dvh-6rem)] w-full max-w-xl flex-col">
-            <div class="mt-8">
-                <h2 class="mt-3 text-3xl font-semibold leading-tight tracking-tight text-[#152b38] xl:text-4xl">Il servizio, passo dopo passo.</h2>
-                <p class="mt-3 max-w-md text-sm leading-6 text-slate-500">Persone, sedi e attività connesse in un unico percorso di lavoro.</p>
-            </div>
-
-            <div class="relative mt-7 flex-1">
-                <div class="absolute bottom-10 left-[15px] top-10 border-l border-dashed border-[#d9784e]/50"></div>
-                <ol class="relative flex h-full flex-col justify-between gap-3" aria-label="Fasi del servizio">
-                    <li class="grid grid-cols-[32px_122px_minmax(0,1fr)] items-center gap-3">
-                        <span class="relative z-10 flex h-8 w-8 items-center justify-center rounded-full border border-[#d9784e]/50 bg-[#f1f8fb] text-[10px] font-medium tabular-nums text-[#a14f32]">01</span>
-                        <svg aria-hidden="true" class="h-24 w-[122px] shrink-0 rounded-xl bg-white shadow-sm ring-1 ring-sky-200" viewBox="0 0 112 88" fill="none">
-                            <path d="M0 68h112M14 78h85" stroke="#b7d5e1" stroke-width="2"/>
-                            <path d="M23 18h45v43H23z" fill="#fff" stroke="#8db8c8" stroke-width="2"/>
-                            <path d="M23 30h45M34 14v9m23-9v9" stroke="#b65d3b" stroke-width="2.5" stroke-linecap="round"/>
-                            <path d="M31 39h7m7 0h7m-21 9h7m7 0h7m-21 9h7" stroke="#6d909d" stroke-width="2" stroke-linecap="round"/>
-                            <path d="M78 50h20m-20 6h13" stroke="#8db8c8" stroke-width="2" stroke-linecap="round"/>
-                            <path d="m76 36 5 5 10-12" stroke="#b65d3b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                        <div class="min-w-0 border-b border-sky-200/70 py-2">
-                            <p class="text-[10px] font-medium uppercase tracking-[0.12em] text-[#a14f32]">Pianifica</p>
-                            <h3 class="mt-1 text-sm font-medium leading-5 text-[#152b38]">Turni e coperture</h3>
-                            <p class="mt-1 text-xs leading-4 text-slate-500">Definisci servizio e orari.</p>
-                        </div>
-                    </li>
-                    <li class="grid grid-cols-[32px_122px_minmax(0,1fr)] items-center gap-3">
-                        <span class="relative z-10 flex h-8 w-8 items-center justify-center rounded-full border border-[#d9784e]/50 bg-[#f1f8fb] text-[10px] font-medium tabular-nums text-[#a14f32]">02</span>
-                        <svg aria-hidden="true" class="h-24 w-[122px] shrink-0 rounded-xl bg-white shadow-sm ring-1 ring-sky-200" viewBox="0 0 112 88" fill="none">
-                            <path d="M0 68h112M14 78h85" stroke="#b7d5e1" stroke-width="2"/>
-                            <path d="M15 61V31l20-13 20 13v30" fill="#fff" stroke="#8db8c8" stroke-width="2"/>
-                            <path d="M15 34h40M23 39v22m10-22v22m10-22v22" stroke="#a9c2bd" stroke-width="2"/>
-                            <path d="M72 34c0-6 4-10 9-10s9 4 9 10-4 9-9 9-9-3-9-9Z" fill="#c99a7c"/>
-                            <path d="M66 62c1-10 6-15 15-15s14 5 15 15" fill="#5a8797"/>
-                            <path d="M90 48h11v14H90" stroke="#b65d3b" stroke-width="2"/>
-                        </svg>
-                        <div class="min-w-0 border-b border-sky-200/70 py-2">
-                            <p class="text-[10px] font-medium uppercase tracking-[0.12em] text-[#a14f32]">Assegna</p>
-                            <h3 class="mt-1 text-sm font-medium leading-5 text-[#152b38]">Persone e squadre</h3>
-                            <p class="mt-1 text-xs leading-4 text-slate-500">Abbina operatori e competenze.</p>
-                        </div>
-                    </li>
-                    <li class="grid grid-cols-[32px_122px_minmax(0,1fr)] items-center gap-3">
-                        <span class="relative z-10 flex h-8 w-8 items-center justify-center rounded-full border border-[#d9784e]/50 bg-[#f1f8fb] text-[10px] font-medium tabular-nums text-[#a14f32]">03</span>
-                        <svg aria-hidden="true" class="h-24 w-[122px] shrink-0 rounded-xl bg-white shadow-sm ring-1 ring-sky-200" viewBox="0 0 112 88" fill="none">
-                            <path d="M0 68h112M14 78h85" stroke="#b7d5e1" stroke-width="2"/>
-                            <path d="M12 61V38l27-16 27 16v23H12Z" fill="#fff" stroke="#8db8c8" stroke-width="2"/>
-                            <path d="M20 42h37M20 49h37M20 56h18" stroke="#6d909d" stroke-width="2" stroke-linecap="round"/>
-                            <path d="M78 17c9 0 15 6 15 15 0 10-15 25-15 25S63 42 63 32c0-9 6-15 15-15Z" fill="#d9784e"/>
-                            <path d="M75 31h6m-3-3v6" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
-                            <path d="M91 56h13" stroke="#8db8c8" stroke-width="2" stroke-linecap="round"/>
-                        </svg>
-                        <div class="min-w-0 border-b border-sky-200/70 py-2">
-                            <p class="text-[10px] font-medium uppercase tracking-[0.12em] text-[#a14f32]">Presidia</p>
-                            <h3 class="mt-1 text-sm font-medium leading-5 text-[#152b38]">Sedi e attività</h3>
-                            <p class="mt-1 text-xs leading-4 text-slate-500">Segui il servizio sul campo.</p>
-                        </div>
-                    </li>
-                    <li class="grid grid-cols-[32px_122px_minmax(0,1fr)] items-center gap-3">
-                        <span class="relative z-10 flex h-8 w-8 items-center justify-center rounded-full border border-[#d9784e]/50 bg-[#f1f8fb] text-[10px] font-medium tabular-nums text-[#a14f32]">04</span>
-                        <svg aria-hidden="true" class="h-24 w-[122px] shrink-0 rounded-xl bg-white shadow-sm ring-1 ring-sky-200" viewBox="0 0 112 88" fill="none">
-                            <path d="M0 68h112M14 78h85" stroke="#b7d5e1" stroke-width="2"/>
-                            <path d="M24 15h46v48H24z" fill="#fff" stroke="#8db8c8" stroke-width="2"/>
-                            <path d="M33 25h23m-23 7h29" stroke="#6d909d" stroke-width="2" stroke-linecap="round"/>
-                            <path d="M34 55V44m9 11V37m9 18V47m9 8V33" stroke="#b65d3b" stroke-width="3" stroke-linecap="round"/>
-                            <path d="m77 45 7 7 15-17" stroke="#5a8797" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-                            <path d="M78 61h22" stroke="#8db8c8" stroke-width="2" stroke-linecap="round"/>
-                        </svg>
-                        <div class="min-w-0 py-2">
-                            <p class="text-[10px] font-medium uppercase tracking-[0.12em] text-[#a14f32]">Verifica</p>
-                            <h3 class="mt-1 text-sm font-medium leading-5 text-[#152b38]">Presenze e report</h3>
-                            <p class="mt-1 text-xs leading-4 text-slate-500">Controlla risultati e presenze.</p>
-                        </div>
-                    </li>
-                </ol>
-            </div>
-
-            <p class="mt-3 border-t border-sky-200/70 pt-4 text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500">Un percorso, ogni servizio sotto controllo</p>
-        </div>
-    </aside>
+        <p class="mt-6 flex items-center justify-center gap-1.5 text-center text-xs text-slate-500">
+            <svg class="h-3.5 w-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V7.5a4.5 4.5 0 10-9 0v3m-.75 0h10.5a1.5 1.5 0 011.5 1.5v6.75a1.5 1.5 0 01-1.5 1.5H6.75a1.5 1.5 0 01-1.5-1.5V12a1.5 1.5 0 011.5-1.5z"/></svg>
+            Accesso riservato al personale autorizzato
+        </p>
+    </div>
 </main>
