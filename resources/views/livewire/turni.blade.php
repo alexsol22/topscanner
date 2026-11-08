@@ -268,14 +268,36 @@
     @if ($modal)
         <x-ui.modal title="Nuovo turno" wide>
             <form wire:submit="salva" class="grid gap-4 sm:grid-cols-2">
-                <x-ui.field label="Cliente" name="f.cliente_id"><select wire:model.live="f.cliente_id" class="input"><option value="">—</option>@foreach ($clienti as $c)<option value="{{ $c->id }}">{{ $c->ragione_sociale }}</option>@endforeach</select></x-ui.field>
-                <x-ui.field label="Sede" name="f.sede_id"><select wire:model="f.sede_id" class="input"><option value="">—</option>@foreach ($sediForm as $s)<option value="{{ $s->id }}">{{ $s->descrizione }}</option>@endforeach</select></x-ui.field>
+                <x-ui.field label="Cliente" name="f.cliente_id">
+                    <div wire:key="crea-turno-cliente">
+                        <x-select-ricerca
+                            model="f.cliente_id"
+                            :options="$clienti->map(fn ($c) => ['id' => $c->id, 'label' => $c->ragione_sociale])->values()"
+                            placeholder="Seleziona un cliente"
+                        />
+                    </div>
+                </x-ui.field>
+                <x-ui.field label="Sede" name="f.sede_id">
+                    <div wire:key="crea-turno-sedi-{{ $f['cliente_id'] }}">
+                        <x-select-ricerca
+                            model="f.sede_id"
+                            :options="$sediForm->map(fn ($s) => ['id' => $s->id, 'label' => $s->descrizione])->values()"
+                            placeholder="Seleziona una sede"
+                        />
+                    </div>
+                </x-ui.field>
                 <x-ui.field label="Data inizio" name="f.data_inizio"><input type="date" wire:model.live="f.data_inizio" class="input"></x-ui.field>
                 <x-ui.field label="Ora inizio" name="f.ora_inizio"><input type="time" wire:model.live="f.ora_inizio" class="input"></x-ui.field>
                 <x-ui.field label="Data fine" name="f.data_fine"><input type="date" wire:model.live="f.data_fine" class="input"></x-ui.field>
                 <x-ui.field label="Ora fine" name="f.ora_fine"><input type="time" wire:model.live="f.ora_fine" class="input"></x-ui.field>
                 <x-ui.field label="Operatore (solo disponibili)" name="f.operatore_id" class="sm:col-span-2">
-                    <select wire:model="f.operatore_id" class="input"><option value="">—</option>@foreach ($disponibili as $o)<option value="{{ $o->id }}">{{ $o->preferito ? '★ ' : '' }}{{ $o->nome_completo }}</option>@endforeach</select>
+                    <div wire:key="crea-turno-operatori-{{ $f['cliente_id'] }}-{{ $f['data_inizio'] }}-{{ $f['ora_inizio'] }}-{{ $f['data_fine'] }}-{{ $f['ora_fine'] }}">
+                        <x-select-ricerca
+                            model="f.operatore_id"
+                            :options="$disponibili->map(fn ($o) => ['id' => $o->id, 'label' => ($o->preferito ? '★ ' : '').$o->nome_completo])->values()"
+                            placeholder="Seleziona un operatore"
+                        />
+                    </div>
                 </x-ui.field>
                 <div class="rounded-2xl bg-sky-50 p-4 sm:col-span-2">
                     <p class="mb-3 text-sm font-semibold text-slate-700">Ripeti turno (facoltativo)</p>

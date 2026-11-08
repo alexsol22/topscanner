@@ -66,14 +66,13 @@
             @forelse ($sedi as $s)
                 <article wire:key="s{{ $s->id }}" class="card overflow-hidden">
                     <div class="grid md:grid-cols-[12rem_minmax(0,1fr)]">
-                        <div class="min-h-48 bg-sky-50 md:min-h-full">
+                        <div x-data="{ fotoDisponibile: @js((bool) $s->foto) }" class="relative flex min-h-48 items-center justify-center bg-sky-50 text-sky-500 md:min-h-full">
                             @if ($s->foto)
-                                <img src="{{ route('sedi.foto', $s->id) }}" alt="Foto di {{ $s->descrizione }}" class="h-48 w-full object-cover md:h-full">
-                            @else
-                                <div class="flex h-48 items-center justify-center text-sky-500 md:h-full">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-4h6v4M9 10h.01M12 10h.01M15 10h.01M9 13h.01M12 13h.01M15 13h.01"/></svg>
-                                </div>
+                                <img x-show="fotoDisponibile" x-on:error="fotoDisponibile = false" src="{{ route('sedi.foto', $s->id) }}" alt="Foto di {{ $s->descrizione }}" class="absolute inset-0 h-full w-full object-cover">
                             @endif
+                            <svg x-cloak x-show="!fotoDisponibile" xmlns="http://www.w3.org/2000/svg" class="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-4h6v4M9 10h.01M12 10h.01M15 10h.01M9 13h.01M12 13h.01M15 13h.01"/>
+                            </svg>
                         </div>
                         <div class="flex min-w-0 flex-col p-5 sm:p-6">
                             <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">

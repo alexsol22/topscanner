@@ -36,19 +36,24 @@
             <h2 class="mb-4 text-base font-bold text-slate-800">Dati sede</h2>
             <div class="grid gap-4 sm:grid-cols-2">
                 <x-ui.field label="{{ $sedeId ? 'Qrcode associato' : 'Associa Qrcode' }}" name="codiceSedeId">
-                    <div wire:ignore x-on:change="$wire.set('codiceSedeId', $event.target.value)">
-                        <select class="input select2-qr">
-                            <option value="" @selected($codiceSedeId === '')>— Seleziona —</option>
-                            @foreach ($codiciSede as $id => $codice)
-                                <option value="{{ $id }}" @selected((string) $id === $codiceSedeId)>{{ $codice }}</option>
-                            @endforeach
-                        </select>
-                    </div>
+                    <x-select-ricerca
+                        model="codiceSedeId"
+                        :options="collect($codiciSede)->map(fn ($codice, $id) => ['id' => (string) $id, 'label' => $codice])->values()"
+                        placeholder="— Seleziona —"
+                        :empty-value="''"
+                    />
                 </x-ui.field>
                 <x-ui.field label="Distanza massima scansione" name="f.distanza_max">
                     <div class="relative"><input type="number" wire:model.live.debounce.400ms="f.distanza_max" class="input !pr-10"><span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-slate-400">m</span></div>
                 </x-ui.field>
-                <x-ui.field label="Cliente *" name="f.cliente_id"><select wire:model="f.cliente_id" class="input" @disabled($sedeId)><option value="">—</option>@foreach ($clienti as $c)<option value="{{ $c->id }}">{{ $c->ragione_sociale }}</option>@endforeach</select></x-ui.field>
+                <x-ui.field label="Cliente *" name="f.cliente_id">
+                    <x-select-ricerca
+                        model="f.cliente_id"
+                        :options="$clienti->map(fn ($c) => ['id' => (string) $c->id, 'label' => $c->ragione_sociale])->values()"
+                        placeholder="— Seleziona —"
+                        :disabled="(bool) $sedeId"
+                    />
+                </x-ui.field>
                 <div class="grid grid-cols-[1fr_auto] items-start gap-3">
                     <x-ui.field label="Denominazione *" name="f.descrizione"><input wire:model="f.descrizione" class="input"></x-ui.field>
                     <x-ui.field label="Colore" name="f.colore"><input type="color" wire:model.live="f.colore" class="h-10 w-14 cursor-pointer rounded-lg border border-sky-100 bg-white p-1"></x-ui.field>
@@ -58,11 +63,18 @@
                 <x-ui.field label="Note" name="f.note" class="sm:col-span-2"><textarea wire:model="f.note" rows="2" class="input"></textarea></x-ui.field>
                 <x-ui.field label="Fotografia sede" name="foto" class="sm:col-span-2">
                     <div class="flex items-center gap-3">
+                        <div x-data="{ fotoDisponibile: @js((bool) ($foto || ($sedeId && $fotoSede))) }" class="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-sky-50 text-sky-500 ring-1 ring-sky-100">
                         @if ($foto)
-                            <img src="{{ $foto->temporaryUrl() }}" alt="" class="h-14 w-14 rounded-xl object-cover ring-1 ring-sky-100">
+                            <img x-show="fotoDisponibile" x-on:error="fotoDisponibile = false" src="{{ $foto->temporaryUrl() }}" alt="" class="h-full w-full object-cover">
                         @elseif ($sedeId && $fotoSede)
-                            <a href="{{ route('sedi.foto', $sedeId) }}" target="_blank"><img src="{{ route('sedi.foto', $sedeId) }}" alt="" class="h-14 w-14 rounded-xl object-cover ring-1 ring-sky-100"></a>
+                            <a x-show="fotoDisponibile" href="{{ route('sedi.foto', $sedeId) }}" target="_blank" class="h-full w-full">
+                                <img x-on:error="fotoDisponibile = false" src="{{ route('sedi.foto', $sedeId) }}" alt="" class="h-full w-full object-cover">
+                            </a>
                         @endif
+                            <svg x-cloak x-show="!fotoDisponibile" xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-4h6v4M9 10h.01M12 10h.01M15 10h.01M9 13h.01M12 13h.01M15 13h.01"/>
+                            </svg>
+                        </div>
                         <input type="file" wire:model="foto" accept="image/*" class="block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-sky-100 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-sky-700">
                     </div>
                 </x-ui.field>
@@ -229,14 +241,12 @@
                         </div>
                         <div class="grid min-w-0 flex-1 gap-4 sm:grid-cols-2">
                             <x-ui.field label="Qrcode associato" name="postazioni.{{ $chiave }}.codice_id" class="sm:col-span-2">
-                                <div wire:ignore x-on:change="$wire.set('postazioni.{{ $chiave }}.codice_id', $event.target.value)">
-                                    <select class="input select2-qr">
-                                        <option value="" @selected($p['codice_id'] === '')>— Seleziona —</option>
-                                        @foreach ($codiciPostazioni[$chiave] ?? [] as $id => $codice)
-                                            <option value="{{ $id }}" @selected((string) $id === $p['codice_id'])>{{ $codice }}</option>
-                                        @endforeach
-                                    </select>
-                                </div>
+                                <x-select-ricerca
+                                    model="postazioni.{{ $chiave }}.codice_id"
+                                    :options="collect($codiciPostazioni[$chiave] ?? [])->map(fn ($codice, $id) => ['id' => (string) $id, 'label' => $codice])->values()"
+                                    placeholder="— Seleziona —"
+                                    :empty-value="''"
+                                />
                             </x-ui.field>
                             <x-ui.field label="Titolo postazione *" name="postazioni.{{ $chiave }}.titolo" class="sm:col-span-2"><input wire:model="postazioni.{{ $chiave }}.titolo" class="input"></x-ui.field>
                             <x-ui.field label="Numero passaggi per turno" name="postazioni.{{ $chiave }}.passaggi"><input type="number" min="0" wire:model="postazioni.{{ $chiave }}.passaggi" class="input"></x-ui.field>
