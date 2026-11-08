@@ -184,7 +184,7 @@ class TurniTest extends TestCase
             'ora_inizio' => '08:00',
             'ora_fine' => '16:00',
             'ore' => 8,
-            'stato' => 'I',
+            'stato' => 'P',
         ]);
         $componente = Livewire::actingAs(User::findOrFail(1))->test(Turni::class)
             ->set('vista', 'lista')
@@ -225,7 +225,8 @@ class TurniTest extends TestCase
             ->assertSee(self::ORA_INGRESSO)
             ->assertSee(self::ORA_USCITA)
             ->assertSee('Timbrature del turno')
-            ->assertSee('Ingresso e uscita registrati.');
+            ->assertSee('Ingresso e uscita registrati.')
+            ->assertSee('Completato');
 
         $componente->call('chiudiDettaglioTurno')
             ->set('vista', 'calendario')

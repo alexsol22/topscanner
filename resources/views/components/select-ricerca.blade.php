@@ -1,4 +1,4 @@
-@props(['model', 'options', 'placeholder' => 'Tutti', 'draft' => false, 'defer' => false, 'emptyValue' => null, 'disabled' => false])
+@props(['model', 'options', 'placeholder' => 'Tutti', 'draft' => false, 'defer' => false, 'emptyValue' => null, 'disabled' => false, 'dipendeDa' => null])
 
 <div
     x-data="{
@@ -8,7 +8,8 @@
         valoreVuoto: @js($emptyValue),
         get valore() { return {{ $draft ? "this.valori['{$model}']" : "\$wire.\$get('{$model}')" }} },
         get etichetta() { return this.opzioni.find(o => String(o.id) === String(this.valore))?.label ?? '{{ $placeholder }}' },
-        get filtrate() { return this.opzioni.filter(o => o.label.toLowerCase().includes(this.q.toLowerCase())) },
+        get padre() { return {{ $dipendeDa ? "this.valori['{$dipendeDa}']" : 'null' }} },
+        get filtrate() { return this.opzioni.filter(o => (!this.padre || String(o.padre) === String(this.padre)) && o.label.toLowerCase().includes(this.q.toLowerCase())) },
         stileMenu: {},
         altezzaLista: '15rem',
         apri() {
@@ -37,6 +38,9 @@
         },
         scegli(id) { id = id ?? this.valoreVuoto; {{ $draft ? "this.valori['{$model}'] = id" : "\$wire.\$set('{$model}', id, ".($defer ? 'false' : 'true').")" }}; this.open = false; this.q = '' },
     }"
+    @if ($dipendeDa && $draft)
+    x-effect="if (valore && padre && !opzioni.some(o => String(o.id) === String(valore) && String(o.padre) === String(padre))) { valori['{{ $model }}'] = valoreVuoto }"
+    @endif
     x-on:click.outside="open = false"
     x-on:keydown.escape="if (open) { $event.stopPropagation(); open = false; }"
     x-on:scroll.window.capture="if (open) aggiornaPosizione()"

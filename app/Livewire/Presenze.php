@@ -20,8 +20,10 @@ class Presenze extends Component
 {
     use ConAccesso, WithPagination;
 
+    #[Url]
     public string $da = '';
 
+    #[Url]
     public string $a = '';
 
     #[Url(as: 'sede')]
@@ -30,6 +32,7 @@ class Presenze extends Component
     #[Url(as: 'operatore')]
     public ?int $filtroOperatore = null;
 
+    #[Url(as: 'cliente')]
     public ?int $filtroCliente = null;
 
     public string $vista = 'gda';
@@ -45,8 +48,8 @@ class Presenze extends Component
         };
 
         if ($this->vista !== 'gda') {
-            $this->da = now()->startOfMonth()->toDateString();
-            $this->a = now()->toDateString();
+            $this->da = $this->da ?: now()->startOfMonth()->toDateString();
+            $this->a = $this->a ?: now()->toDateString();
         }
     }
 
@@ -87,6 +90,22 @@ class Presenze extends Component
         }
 
         $this->resetPage();
+
+        $query = array_filter([
+            'da' => $this->da,
+            'a' => $this->a,
+            'cliente' => $this->filtroCliente,
+            'sede' => $this->filtroSede,
+            'operatore' => $this->filtroOperatore,
+        ], fn ($valore): bool => $valore !== null && $valore !== '');
+
+        $rotta = match ($this->vista) {
+            'clienti' => 'presenze.clienti',
+            'operatori' => 'presenze.operatori',
+            default => 'presenze',
+        };
+
+        $this->redirect(route($rotta, $query));
     }
 
     public function mostraPassaggi(int $turno): void
@@ -150,7 +169,7 @@ class Presenze extends Component
         $dati = [
             'perCliente' => $perCliente,
             'perOperatore' => $perOperatore,
-            'sedi' => $this->sediVisibili()->orderBy('descrizione')->get(['id', 'descrizione']),
+            'sedi' => $this->sediVisibili()->orderBy('descrizione')->get(['id', 'id_cliente', 'descrizione']),
             'clientiElenco' => $this->clientiVisibili()->orderBy('ragione_sociale')->get(['tc_clienti.id', 'ragione_sociale']),
             'operatori' => Admin::where('user_type', 4)->orderBy('cognome')->get(),
         ];
@@ -203,29 +222,7 @@ class Presenze extends Component
     private function applicaFiltriDataOra(Builder $query): Builder
     {
         return $query
-            ->when($this->da, function (Builder $builder): void {
-                $inizio = Carbon::parse($this->da);
-                $data = $inizio->toDateString();
-                $ora = $inizio->format('H:i:s');
-
-                $builder->where(function (Builder $query) use ($data, $ora): void {
-                    $query->whereDate('data_inizio', '>', $data)
-                        ->orWhere(fn (Builder $stessoGiorno) => $stessoGiorno
-                            ->whereDate('data_inizio', $data)
-                            ->whereTime('ora_inizio', '>=', $ora));
-                });
-            })
-            ->when($this->a, function (Builder $builder): void {
-                $fine = Carbon::parse($this->a);
-                $data = $fine->toDateString();
-                $ora = $fine->format('H:i:s');
-
-                $builder->where(function (Builder $query) use ($data, $ora): void {
-                    $query->whereDate('data_inizio', '<', $data)
-                        ->orWhere(fn (Builder $stessoGiorno) => $stessoGiorno
-                            ->whereDate('data_inizio', $data)
-                            ->whereTime('ora_inizio', '<=', $ora));
-                });
-            });
+            ->when($this->da, fn (Builder $builder) => $builder->whereDate('data_inizio', '>=', Carbon::parse($this->da)->toDateString()))
+            ->when($this->a, fn (Builder $builder) => $builder->whereDate('data_inizio', '<=', Carbon::parse($this->a)->toDateString()));
     }
 }

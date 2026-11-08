@@ -125,14 +125,27 @@ class PresenzeTest extends TestCase
         }
     }
 
+    public function test_filter_modal_is_available_on_each_presenze_view(): void
+    {
+        $staff = User::create(['user' => 'staff', 'password' => 'secret', 'attivo' => 'Y', 'user_type' => 2]);
+
+        foreach ([route('presenze'), route('presenze.clienti'), route('presenze.operatori')] as $url) {
+            $this->actingAs($staff)->get($url)->assertOk()
+                ->assertSee('Apri filtri')
+                ->assertSee('role="dialog"', false)
+                ->assertSee('Applica filtri')
+                ->assertDontSee('<nav aria-label="Filtri presenze"', false);
+        }
+    }
+
     public function test_filter_controls_are_recreated_when_switching_gda_sections(): void
     {
         $staff = User::create(['user' => 'staff', 'password' => 'secret', 'attivo' => 'Y', 'user_type' => 2]);
         $oggi = today()->toDateString();
 
         Livewire::actingAs($staff)->test(Presenze::class)
-            ->set('da', $oggi.'T00:00')
-            ->set('a', $oggi.'T23:59')
+            ->set('da', $oggi)
+            ->set('a', $oggi)
             ->assertSee('wire:key="presenze-filtri-gda"', false)
             ->set('vista', 'clienti')
             ->assertSee('wire:key="presenze-filtri-clienti"', false)
@@ -140,7 +153,7 @@ class PresenzeTest extends TestCase
             ->assertSee('wire:key="presenze-filtri-operatori"', false);
     }
 
-    public function test_gda_date_and_time_filters_limit_turns_to_the_selected_interval(): void
+    public function test_gda_date_filters_limit_turns_to_the_selected_interval(): void
     {
         $staff = User::create(['user' => 'staff', 'password' => 'secret', 'attivo' => 'Y', 'user_type' => 2]);
         $cliente = DB::table('tc_clienti')->insertGetId(['ragione_sociale' => 'Cliente Test', 'isTest' => 0]);
@@ -155,12 +168,14 @@ class PresenzeTest extends TestCase
         ]);
         $sede = DB::table('tc_sedi')->insertGetId(['id_cliente' => $cliente, 'descrizione' => 'Sede Test']);
 
-        foreach (['08:00' => 'Prima', '09:00' => 'Dentro', '10:30' => 'Dopo'] as $ora => $nota) {
+        foreach ([-3 => 'Prima', 0 => 'Dentro', 3 => 'Dopo'] as $giorni => $nota) {
+            $giorno = today()->addDays($giorni)->toDateString();
+            $ora = '09:00';
             $turno = DB::table('tc_turni')->insertGetId([
                 'id_cliente' => $cliente,
                 'id_sede' => $sede,
                 'id_operatore' => $operatore,
-                'data_inizio' => today()->toDateString(),
+                'data_inizio' => $giorno,
                 'ora_inizio' => $ora,
                 'ore' => 1,
                 'ore_lavorate' => 1,
@@ -172,7 +187,7 @@ class PresenzeTest extends TestCase
                 'id_cliente' => $cliente,
                 'id_sede' => $sede,
                 'tipo' => 'I',
-                'data' => today()->toDateString(),
+                'data' => $giorno,
                 'orario' => $ora,
                 'note_operatore' => $nota,
             ]);
@@ -184,11 +199,21 @@ class PresenzeTest extends TestCase
             ->assertSee('Prima')
             ->assertSee('Dentro')
             ->assertSee('Dopo')
-            ->set('da', today()->format('Y-m-d').'T08:30')
-            ->set('a', today()->format('Y-m-d').'T10:00')
+            ->set('da', today()->subDay()->toDateString())
+            ->set('a', today()->addDay()->toDateString())
             ->assertSee('Dentro')
             ->assertDontSee('Prima')
             ->assertDontSee('Dopo');
+    }
+
+    public function test_site_filter_options_are_tied_to_the_selected_client(): void
+    {
+        $staff = User::create(['user' => 'staff', 'password' => 'secret', 'attivo' => 'Y', 'user_type' => 2]);
+        $dati = $this->creaTurniFiltrabili();
+
+        Livewire::actingAs($staff)->test(Presenze::class)
+            ->assertViewHas('sedi', fn ($sedi): bool => $sedi->every(fn ($sede): bool => $sede->id_cliente !== null))
+            ->assertSee('filtroCliente', false);
     }
 
     public function test_client_and_site_filters_limit_client_hours(): void
@@ -202,7 +227,20 @@ class PresenzeTest extends TestCase
             ->set('a', today()->toDateString())
             ->set('filtroCliente', $dati['clienteUno'])
             ->set('filtroSede', $dati['sedeUno'])
-            ->call('applicaFiltri');
+            ->call('applicaFiltri')
+            ->assertRedirect(route('presenze.clienti', [
+                'da' => today()->toDateString(),
+                'a' => today()->toDateString(),
+                'cliente' => $dati['clienteUno'],
+                'sede' => $dati['sedeUno'],
+            ]));
+
+        $componente = Livewire::actingAs($staff)->withQueryParams([
+            'da' => today()->toDateString(),
+            'a' => today()->toDateString(),
+            'cliente' => $dati['clienteUno'],
+            'sede' => $dati['sedeUno'],
+        ])->test(Presenze::class)->set('vista', 'clienti');
 
         $this->assertSame([['nome' => 'Cliente Uno', 'previste' => 2.0, 'lavorate' => 2.0]], $componente->viewData('perCliente')->values()->all());
     }
@@ -217,7 +255,18 @@ class PresenzeTest extends TestCase
             ->set('da', today()->toDateString())
             ->set('a', today()->toDateString())
             ->set('filtroOperatore', $dati['operatoreDue'])
-            ->call('applicaFiltri');
+            ->call('applicaFiltri')
+            ->assertRedirect(route('presenze.operatori', [
+                'da' => today()->toDateString(),
+                'a' => today()->toDateString(),
+                'operatore' => $dati['operatoreDue'],
+            ]));
+
+        $componente = Livewire::actingAs($staff)->withQueryParams([
+            'da' => today()->toDateString(),
+            'a' => today()->toDateString(),
+            'operatore' => $dati['operatoreDue'],
+        ])->test(Presenze::class)->set('vista', 'operatori');
 
         $this->assertSame([$dati['operatoreDue']], $componente->viewData('perOperatore')->keys()->all());
         $this->assertSame(7.0, $componente->viewData('perOperatore')->get($dati['operatoreDue'])['previste']);
@@ -228,19 +277,37 @@ class PresenzeTest extends TestCase
         $staff = User::create(['user' => 'staff', 'password' => 'secret', 'attivo' => 'Y', 'user_type' => 2]);
         $dati = $this->creaTurniFiltrabili();
 
-        $componente = Livewire::actingAs($staff)->test(Presenze::class)
+        Livewire::actingAs($staff)->test(Presenze::class)
+            ->assertSee('3 risultati')
+            ->assertSee('Cliente Due')
             ->call('applicaFiltri', [
                 'filtroCliente' => $dati['clienteUno'],
                 'filtroSede' => $dati['sedeUno'],
                 'filtroOperatore' => $dati['operatoreUno'],
-                'da' => today()->format('Y-m-d').'T08:30',
-                'a' => today()->format('Y-m-d').'T10:00',
+                'da' => today()->toDateString(),
+                'a' => today()->toDateString(),
             ])
-            ->assertSet('filtroCliente', $dati['clienteUno'])
-            ->assertSet('filtroSede', $dati['sedeUno'])
-            ->assertSet('filtroOperatore', $dati['operatoreUno']);
+            ->assertRedirect(route('presenze', [
+                'da' => today()->toDateString(),
+                'a' => today()->toDateString(),
+                'cliente' => $dati['clienteUno'],
+                'sede' => $dati['sedeUno'],
+                'operatore' => $dati['operatoreUno'],
+            ]));
 
-        $componente->assertViewHas('turniGda', fn ($pagina): bool => $pagina->pluck('id')->all() === [$dati['turnoUno']]);
+        $componente = Livewire::actingAs($staff)->withQueryParams([
+            'da' => today()->toDateString(),
+            'a' => today()->toDateString(),
+            'cliente' => $dati['clienteUno'],
+            'sede' => $dati['sedeUno'],
+            'operatore' => $dati['operatoreUno'],
+        ])->test(Presenze::class)
+            ->assertViewHas('turniGda', fn ($pagina): bool => $pagina->pluck('id')->all() === [$dati['turnoUno']])
+            ->assertSee('1 risultati');
+
+        $html = $componente->html();
+        $this->assertSame(1, substr_count($html, 'Turni completati'));
+        $this->assertSame(1, substr_count($html, '>Ore previste<'));
     }
 
     public function test_gda_has_legacy_title_filters_and_table_without_extra_sections(): void
@@ -283,7 +350,7 @@ class PresenzeTest extends TestCase
             ->assertSee('Giornale delle attività')
             ->assertSee('Ragione Sociale')
             ->assertSee('Sede')
-            ->assertSee('Operattore')
+            ->assertSee('Operatore')
             ->assertSee('Dal')
             ->assertSee('Al')
             ->assertSee('Inizio Turno')

@@ -71,11 +71,14 @@ class Turno extends LegacyModel
     public function statoEffettivo(): string
     {
         $now = now();
+        $presenze = $this->relationLoaded('presenze') ? $this->presenze : collect();
+        $ingressoRegistrato = $presenze->contains('tipo', Gda::INIZIO);
+        $uscitaRegistrata = $presenze->contains('tipo', Gda::FINE);
 
         return match (true) {
-            $this->stato === 'F' => 'completato',
-            $this->stato === 'I' && $this->fine->lt($now) => 'non_completato',
-            $this->stato === 'I' => 'in_corso',
+            $this->stato === 'F' || ($ingressoRegistrato && $uscitaRegistrata) => 'completato',
+            ($this->stato === 'I' || $ingressoRegistrato) && $this->fine->lt($now) => 'non_completato',
+            $this->stato === 'I' || $ingressoRegistrato => 'in_corso',
             $this->inizio->lt($now) && $this->fine->lt($now) => 'non_eseguito',
             $this->inizio->lt($now) => 'non_timbrato',
             default => 'programmato',
