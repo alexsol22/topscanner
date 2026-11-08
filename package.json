@@ -17,6 +17,8 @@
         "@laravel/multiplex": "^0.4.1"
     },
     "dependencies": {
-        "jsqr": "^1.4.0"
+        "jquery": "^3.7.1",
+        "jsqr": "^1.4.0",
+        "select2": "^4.0.13"
     }
 }

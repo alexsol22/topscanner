@@ -9,6 +9,7 @@ use App\Models\User;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
@@ -79,6 +80,101 @@ class ClientiOperatoriSuiteTest extends TestCase
         Livewire::actingAs($this->admin())->test(Clienti::class)
             ->assertSee('Cliente 1')->assertDontSee('Zeta Unico')
             ->set('cerca', 'Zeta')->assertSee('Zeta Unico')->assertDontSee('Cliente 1');
+    }
+
+    public function test_clienti_filters_match_individual_fields_and_combine(): void
+    {
+        $alpha = $this->cliente('Alpha Srl');
+        $beta = $this->cliente('Beta Spa');
+        DB::table('tc_clienti')->where('id', $alpha)->update([
+            'piva' => '10123456789', 'codice_fiscale' => 'ALPHA123', 'email' => 'alpha@example.it', 'telefono' => '0123456',
+        ]);
+        DB::table('tc_clienti')->where('id', $beta)->update([
+            'piva' => '98765432109', 'codice_fiscale' => 'BETA456', 'email' => 'beta@example.it', 'telefono' => '9876543',
+        ]);
+
+        foreach ([
+            'filtroRagioneSociale' => 'Alph',
+            'filtroPiva' => '10123',
+            'filtroCodiceFiscale' => 'ALPHA123',
+            'filtroEmail' => 'alpha@example',
+            'filtroTelefono' => '0123',
+        ] as $campo => $valore) {
+            Livewire::actingAs($this->admin())->test(Clienti::class)
+                ->set($campo, $valore)
+                ->assertSee('Alpha Srl')
+                ->assertDontSee('Beta Spa');
+        }
+
+        Livewire::actingAs($this->admin())->test(Clienti::class)
+            ->set('filtroRagioneSociale', 'Alpha')
+            ->set('filtroEmail', 'beta@example')
+            ->assertDontSee('Alpha Srl')
+            ->assertDontSee('Beta Spa');
+    }
+
+    public function test_clienti_filters_return_to_first_page(): void
+    {
+        foreach (range(1, 12) as $n) {
+            $this->cliente("Cliente $n");
+        }
+        $this->cliente('Zeta Unico');
+
+        Livewire::actingAs($this->admin())->test(Clienti::class)
+            ->call('setPage', 2)
+            ->set('filtroRagioneSociale', 'Zeta')
+            ->assertSee('Zeta Unico');
+    }
+
+    public function test_clienti_list_links_to_the_filtered_sedi_for_each_client(): void
+    {
+        $cliente = $this->cliente();
+
+        Livewire::actingAs($this->admin())->test(Clienti::class)
+            ->assertSee('href="'.route('sedi', ['cliente' => $cliente]).'"', false);
+    }
+
+    public function test_clienti_list_uses_legacy_columns_and_shows_assigned_operator_details(): void
+    {
+        $cliente = $this->cliente();
+        DB::table('tc_clienti')->where('id', $cliente)->update([
+            'codice_fiscale' => 'ALPHA123',
+            'email' => 'alpha@example.it',
+            'pec' => 'alpha-pec@example.it',
+        ]);
+        $preferito = $this->operatore('Mario', 'Rossi');
+        $escluso = $this->operatore('Luca', 'Bianchi', 'luca@t.it');
+        DB::table('tc_operatori_preferiti')->insert(['id_cliente' => $cliente, 'id_operatore' => $preferito]);
+        DB::table('tc_operatori_escludi')->insert(['id_cliente' => $cliente, 'id_operatore' => $escluso]);
+
+        $lista = Livewire::actingAs($this->admin())->test(Clienti::class)
+            ->assertSee('Ragione Sociale')
+            ->assertSee('Iva / Codice Fiscale')
+            ->assertSee('Referente')
+            ->assertSee('Email')
+            ->assertSee('Telefono')
+            ->assertSee('Operatori')
+            ->assertSee('Gestisci')
+            ->assertSee('Mod')
+            ->assertSee('Can')
+            ->assertSee('P.iva: 12345678901')
+            ->assertSee('Codice fiscale: ALPHA123')
+            ->assertSee('Email: alpha@example.it')
+            ->assertSee('Pec: alpha-pec@example.it')
+            ->assertSee('aria-label="Ricerca cliente"', false)
+            ->assertSee('aria-label="Aggiungi cliente"', false)
+            ->assertSee('aria-label="Visualizza operatori di Alpha Srl"', false)
+            ->assertSee('aria-label="Gestisci sedi di Alpha Srl"', false)
+            ->assertSee('aria-label="Modifica cliente Alpha Srl"', false)
+            ->assertSee('aria-label="Cancella cliente Alpha Srl"', false)
+            ->assertDontSee('—')
+            ->assertSee('wire:click="mostraOperatori('.$cliente.')"', false)
+            ->call('mostraOperatori', $cliente)
+            ->assertSee('Operatori cliente')
+            ->assertSee('Operatori Preferiti')
+            ->assertSee('Rossi Mario')
+            ->assertSee('Operatori Esclusi')
+            ->assertSee('Bianchi Luca');
     }
 
     public function test_clienti_create_validates_every_field(): void
@@ -161,7 +257,11 @@ class ClientiOperatoriSuiteTest extends TestCase
         $op1 = $this->operatore();
         $op2 = $this->operatore('Luca', 'Bianchi', 'l@t.it');
         $c = Livewire::actingAs($this->admin())->test(Clienti::class)->call('nuovo')
-            ->set('f', $this->datiCliente())->set('preferiti', [$op1, $op2])->set('escludi', [$op1])->call('salva')->assertHasNoErrors();
+            ->set('f', $this->datiCliente())->set('tab', 'operatori')
+            ->assertSee('Operatori preferiti')
+            ->assertSee('Escludi operatori')
+            ->assertSee('placeholder="Scegli operatori…"', false)
+            ->set('preferiti', [$op1, $op2])->set('escludi', [$op1])->call('salva')->assertHasNoErrors();
         $id = DB::table('tc_clienti')->value('id');
         $this->assertSame(2, DB::table('tc_operatori_preferiti')->where('id_cliente', $id)->count());
         $this->assertSame(1, DB::table('tc_operatori_escludi')->where('id_cliente', $id)->count());
@@ -265,13 +365,180 @@ class ClientiOperatoriSuiteTest extends TestCase
 
     public function test_operators_list_search_and_hidden_users(): void
     {
-        $this->operatore('Mario', 'Rossi', 'm@t.it');
+        $mario = $this->operatore('Mario', 'Rossi', 'm@t.it');
         $this->operatore('Luca', 'Bianchi', 'l@t.it');
         DB::table('tc_admin')->insert(['id' => 1, 'user_type' => 4, 'attivo' => 'Y', 'nome' => 'Nascosto', 'cognome' => 'Root']);
 
         Livewire::actingAs($this->admin())->test(Operatori::class)
-            ->assertSee('Mario')->assertSee('Luca')->assertDontSee('Nascosto')
-            ->set('cerca', 'Bianchi')->assertSee('Luca')->assertDontSee('Mario');
+            ->assertSee('Elenco operatori')
+            ->assertSee('aria-label="Aggiungi operatore"', false)
+            ->assertSee('Mario')
+            ->assertSee('aria-label="Modifica Mario Rossi"', false)
+            ->assertSee('aria-label="Elimina Mario Rossi"', false)
+            ->assertSee('aria-label="Disattiva Mario Rossi"', false)
+            ->assertSee('alt="Foto di Mario Rossi"', false)
+            ->assertSee('Luca')
+            ->assertDontSee('Nascosto')
+            ->set('filtroCognome', 'Bianchi')->assertSee('Luca')->assertDontSee('Mario');
+    }
+
+    public function test_operator_filters_search_each_legacy_field_and_combine(): void
+    {
+        $alpha = $this->operatore('Mario', 'Rossi', 'mario@example.it');
+        $beta = $this->operatore('Luca', 'Bianchi', 'luca@example.it');
+        DB::table('tc_admin')->where('id', $alpha)->update(['codice' => 'ALPHA-10', 'cellulare' => '333111']);
+        DB::table('tc_admin')->where('id', $beta)->update(['codice' => 'BETA-20', 'cellulare' => '333222']);
+
+        foreach ([
+            'filtroCodice' => 'ALPHA',
+            'filtroNome' => 'Mario',
+            'filtroCognome' => 'Rossi',
+            'filtroEmail' => 'mario@example',
+            'filtroCellulare' => '333111',
+        ] as $filtro => $valore) {
+            Livewire::actingAs($this->admin())->test(Operatori::class)
+                ->set($filtro, $valore)
+                ->assertSee('Mario')
+                ->assertDontSee('Luca');
+        }
+
+        Livewire::actingAs($this->admin())->test(Operatori::class)
+            ->set('filtroCodice', 'ALPHA')
+            ->set('filtroNome', 'Mario')
+            ->set('filtroCognome', 'Rossi')
+            ->set('filtroEmail', 'mario@example')
+            ->set('filtroCellulare', '333111')
+            ->assertSee('Mario')
+            ->assertDontSee('Luca')
+            ->assertSee('Codice')
+            ->assertSee('Nome')
+            ->assertSee('Cognome')
+            ->assertSee('Email')
+            ->assertSee('Cellulare');
+    }
+
+    public function test_profile_photo_returns_default_avatar_when_user_has_no_photo(): void
+    {
+        $utente = $this->admin();
+        Storage::disk($this->disco)->put('images/avatar/default.jpg', 'default-avatar');
+
+        $this->actingAs($utente)
+            ->get(route('profilo.foto', $utente))
+            ->assertOk()
+            ->assertStreamedContent('default-avatar');
+    }
+
+    public function test_profile_photo_returns_default_avatar_when_photo_file_is_missing(): void
+    {
+        $utente = $this->utente(4, 902);
+        DB::table('tc_admin')->where('id', $utente->id)->update(['avatar' => 'missing.jpg']);
+        Storage::disk($this->disco)->put('images/avatar/default.jpg', 'default-avatar');
+
+        $this->actingAs($utente)
+            ->get(route('profilo.foto', $utente))
+            ->assertOk()
+            ->assertStreamedContent('default-avatar');
+    }
+
+    public function test_profile_photo_fallback_remains_private_to_owner_and_staff(): void
+    {
+        $utente = $this->operatore('Mario', 'Rossi');
+        $altroOperatore = $this->utente(4, 902);
+        Storage::disk($this->disco)->put('images/avatar/default.jpg', 'default-avatar');
+
+        $this->actingAs($altroOperatore)
+            ->get(route('profilo.foto', $utente))
+            ->assertForbidden();
+    }
+
+    public function test_operator_cards_are_sorted_by_numeric_code_ascending(): void
+    {
+        $codici = [
+            '10' => $this->operatore('Codice dieci', 'Test', 'dieci@example.it'),
+            '2' => $this->operatore('Codice due', 'Test', 'due@example.it'),
+            '1' => $this->operatore('Codice uno', 'Test', 'uno@example.it'),
+        ];
+        foreach ($codici as $codice => $id) {
+            DB::table('tc_admin')->where('id', $id)->update(['codice' => $codice]);
+        }
+
+        Livewire::actingAs($this->admin())->test(Operatori::class)
+            ->assertSeeInOrder(['>1</span>', '>2</span>', '>10</span>'], false);
+    }
+
+    public function test_operator_cards_load_more_on_scroll_and_reset_after_filtering(): void
+    {
+        foreach (range(1, 12) as $numero) {
+            $id = $this->operatore("Nome $numero", 'Test', "operatore$numero@example.it");
+            DB::table('tc_admin')->where('id', $id)->update(['codice' => (string) $numero]);
+        }
+
+        $lista = Livewire::actingAs($this->admin())->test(Operatori::class)
+            ->assertSee('Nome 1')
+            ->assertSee('wire:intersect="caricaAltri"', false)
+            ->assertDontSee('Nome 11')
+            ->call('caricaAltri')
+            ->assertSee('Nome 11')
+            ->assertSee('Nome 12')
+            ->assertDontSee('Scorri per caricare altri operatori');
+
+        $lista->call('caricaAltri')->assertSet('utentiVisibili', 20);
+
+        $lista->set('filtroCodice', '11')
+            ->assertSet('utentiVisibili', 10)
+            ->assertSee('Nome 11')
+            ->assertDontSee('Nome 2');
+    }
+
+    public function test_operator_cards_show_legacy_shortcuts_when_related_records_exist(): void
+    {
+        $id = $this->operatore('Mario', 'Rossi', 'm@t.it');
+        $senzaAttivita = $this->operatore('Luca', 'Bianchi', 'luca@t.it');
+        $soloTurni = $this->operatore('Anna', 'Verdi', 'anna@t.it');
+        DB::table('tc_documenti')->insert(['id_tipo' => $id, 'tipo' => 'O', 'formazione' => 'Y', 'descrizione' => 'Antincendio']);
+        DB::table('tc_turni')->insert(['id_operatore' => $id, 'stato' => 'F']);
+        DB::table('tc_turni')->insert(['id_operatore' => $soloTurni, 'stato' => 'I']);
+
+        Livewire::actingAs($this->admin())->test(Operatori::class)
+            ->assertSee('aria-label="Visualizza formazioni di Mario Rossi"', false)
+            ->assertSee('href="'.route('turni', ['operatore' => $id]).'"', false)
+            ->assertSee('href="'.route('presenze', ['operatore' => $id]).'"', false)
+            ->assertSee('aria-label="Visualizza agenda di Anna Verdi"', false)
+            ->assertDontSee('aria-label="Visualizza GDA di Anna Verdi"', false)
+            ->assertDontSee('aria-label="Visualizza formazioni di Luca Bianchi"', false)
+            ->assertDontSee('aria-label="Visualizza agenda di Luca Bianchi"', false)
+            ->assertDontSee('aria-label="Visualizza GDA di Luca Bianchi"', false);
+    }
+
+    public function test_operator_formations_shortcut_opens_a_modal_with_all_documents_and_download_links(): void
+    {
+        $id = $this->operatore('Mario', 'Rossi', 'm@t.it');
+        DB::table('tc_admin')->where('id', $id)->update(['codice' => 'OP-42']);
+        $formazioneId = DB::table('tc_documenti')->insertGetId([
+            'id_tipo' => $id, 'tipo' => 'O', 'formazione' => 'Y', 'inizio' => '2025-03-01', 'fine' => '2025-03-02', 'descrizione' => 'Antincendio', 'file' => 'corso.pdf',
+        ]);
+        $attestatoId = DB::table('tc_documenti')->insertGetId([
+            'id_tipo' => $id, 'tipo' => 'O', 'formazione' => 'N', 'scadenza' => '2026-04-05', 'descrizione' => 'Primo soccorso', 'file' => 'attestato.pdf',
+        ]);
+        $altroOperatore = $this->operatore('Luca', 'Bianchi', 'luca@t.it');
+        DB::table('tc_documenti')->insert(['id_tipo' => $altroOperatore, 'tipo' => 'O', 'formazione' => 'Y', 'descrizione' => 'Documento riservato']);
+
+        $modal = Livewire::actingAs($this->admin())->test(Operatori::class)
+            ->call('mostraFormazioni', $id)
+            ->assertSet('modalFormazioni', true)
+            ->assertSet('editing', false)
+            ->assertSee('Formazioni / Attestati — OP-42')
+            ->assertSee('Dal 01/03/2025 al 02/03/2025')
+            ->assertSee('Scade il 05/04/2026')
+            ->assertSee('Antincendio')
+            ->assertSee('Primo soccorso')
+            ->assertDontSee('Documento riservato')
+            ->assertSee('href="'.route('documenti.scarica', $formazioneId, false).'"', false)
+            ->assertSee('href="'.route('documenti.scarica', $attestatoId, false).'"', false);
+
+        $modal->call('chiudiModalFormazioni')
+            ->assertSet('modalFormazioni', false)
+            ->assertSet('documentiOperatore', []);
     }
 
     public function test_operator_create_validation_and_unique_email(): void
@@ -330,20 +597,59 @@ class ClientiOperatoriSuiteTest extends TestCase
         $idAdmin = DB::table('tc_admin')->where('email', 'anna@t.it')->value('id');
         Livewire::actingAs($this->admin())->test(Operatori::class)->call('modifica', $idAdmin)->assertNotFound();
         Livewire::actingAs($this->admin())->test(Operatori::class)->call('richiediEliminazione', $idAdmin)->assertNotFound();
-        Livewire::actingAs($this->admin())->test(Operatori::class)->call('attivaDisattiva', $idAdmin)->assertNotFound();
+        Livewire::actingAs($this->admin())->test(Operatori::class)->call('richiediCambioStato', $idAdmin, false)->assertNotFound();
     }
 
     public function test_toggle_active_and_no_self_actions(): void
     {
         $id = $this->operatore();
+        DB::table('tc_admin')->where('id', $id)->update(['user' => 'mario.user']);
+        $utente = User::findOrFail($id);
+        $utente->update(['password' => 'password-precedente']);
         $admin = $this->admin();
-        Livewire::actingAs($admin)->test(Operatori::class)->call('attivaDisattiva', $id);
+        $componente = Livewire::actingAs($admin)->test(Operatori::class)
+            ->assertSee('aria-label="Disattiva Mario Rossi"', false)
+            ->call('richiediCambioStato', $id, false)
+            ->assertSet('idCambioStato', $id)
+            ->assertSee('Disabilitare account')
+            ->assertSee('L’operatore non potrà più accedere')
+            ->call('annullaCambioStato')
+            ->assertSet('idCambioStato', null)
+            ->assertSee('Mario');
+        $this->assertSame('Y', DB::table('tc_admin')->find($id)->attivo);
+        Mail::assertSentCount(0);
+
+        $componente->call('richiediCambioStato', $id, false)
+            ->call('confermaCambioStato')
+            ->assertSet('idCambioStato', null)
+            ->assertSee("Account di {$utente->nome_completo} disabilitato.");
         $this->assertSame('N', DB::table('tc_admin')->find($id)->attivo);
-        Livewire::actingAs($admin)->test(Operatori::class)->call('attivaDisattiva', $id);
+
+        Mail::assertSentCount(0);
+
+        $componente->call('richiediCambioStato', $id, true)
+            ->assertSee('Riabilitare account')
+            ->assertSee('Verrà generata una nuova password temporanea')
+            ->call('confermaCambioStato')
+            ->assertSee('Credenziali inviate a '.$utente->email.'.');
         $this->assertSame('Y', DB::table('tc_admin')->find($id)->attivo);
 
+        $passwordInviata = null;
+        Mail::assertSent(NotificaHtml::class, function (NotificaHtml $mail) use (&$passwordInviata, $utente): bool {
+            preg_match('/>Password<\/td>\s*<td[^>]*>([^<]+)<\/td>/s', $mail->corpoHtml, $matches);
+            $passwordInviata = $matches[1] ?? null;
+
+            return $mail->hasTo($utente->email)
+                && $mail->oggettoEmail === 'Area Riservata'
+                && str_contains($mail->corpoHtml, $utente->user)
+                && $passwordInviata !== null;
+        });
+        $this->assertNotNull($passwordInviata);
+        $this->assertTrue(Hash::check($passwordInviata, User::findOrFail($id)->getAuthPassword()));
+        $this->assertFalse(Hash::check('password-precedente', User::findOrFail($id)->getAuthPassword()));
+
         $super = $this->super();
-        Livewire::actingAs($super)->test(Operatori::class)->call('attivaDisattiva', $super->id)->assertForbidden();
+        Livewire::actingAs($super)->test(Operatori::class)->call('richiediCambioStato', $super->id, false)->assertForbidden();
         Livewire::actingAs($super)->test(Operatori::class)->call('richiediEliminazione', $super->id)->assertForbidden();
         Livewire::actingAs($admin)->test(Operatori::class)->call('richiediEliminazione', $admin->id)->assertNotFound();
         $this->assertNotNull(DB::table('tc_admin')->find($super->id));
@@ -490,6 +796,7 @@ class ClientiOperatoriSuiteTest extends TestCase
                 $table->increments('id');
                 $table->unsignedInteger('id_cliente')->nullable();
                 $table->unsignedInteger('id_operatore')->nullable();
+                $table->string('stato')->nullable();
             });
         }
         Schema::create('tc_gda', function (Blueprint $table): void {

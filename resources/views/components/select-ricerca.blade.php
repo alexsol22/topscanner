@@ -1,17 +1,17 @@
-@props(['model', 'options', 'placeholder' => 'Tutti'])
+@props(['model', 'options', 'placeholder' => 'Tutti', 'draft' => false, 'defer' => false])
 
 <div
     x-data="{
         open: false,
         q: '',
         opzioni: @js($options),
-        get valore() { return $wire['{{ $model }}'] },
+        get valore() { return {{ $draft ? "this.valori['{$model}']" : "\$wire['{$model}']" }} },
         get etichetta() { return this.opzioni.find(o => String(o.id) === String(this.valore))?.label ?? '{{ $placeholder }}' },
         get filtrate() { return this.opzioni.filter(o => o.label.toLowerCase().includes(this.q.toLowerCase())) },
-        scegli(id) { $wire.$set('{{ $model }}', id); this.open = false; this.q = '' },
+        scegli(id) { {{ $draft ? "this.valori['{$model}'] = id" : "\$wire.\$set('{$model}', id, ".($defer ? 'false' : 'true').")" }}; this.open = false; this.q = '' },
     }"
     x-on:click.outside="open = false"
-    x-on:keydown.escape="open = false"
+    x-on:keydown.escape="if (open) { $event.stopPropagation(); open = false; }"
     class="relative"
 >
     <button type="button" x-on:click="open = !open; if (open) $nextTick(() => $refs.cerca.focus())" class="input flex items-center justify-between gap-2 text-left" aria-haspopup="listbox" x-bind:aria-expanded="open">

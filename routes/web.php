@@ -28,7 +28,7 @@ Route::middleware('auth')->group(function () {
         $u = auth()->user();
 
         return redirect()->route(match (true) {
-            $u->isStaff() => 'dashboard',
+            $u->isStaff() => 'clienti',
             $u->isOperatore() => 'scansione',
             default => 'turni',
         });
@@ -48,9 +48,13 @@ Route::middleware('auth')->group(function () {
         Route::get('/sedi/nuova', Livewire\SedeForm::class)->name('sedi.crea');
         Route::get('/sedi/{sede}/modifica', Livewire\SedeForm::class)->name('sedi.modifica');
         Route::get('/sedi/{sede}/foto', [DownloadController::class, 'fotoSede'])->name('sedi.foto');
+        Route::get('/sedi/{sede}/qrcode', [DownloadController::class, 'qrSede'])->name('sedi.qrcode');
         Route::get('/postazioni/{postazione}/immagine', [DownloadController::class, 'immaginePostazione'])->name('postazioni.immagine');
+        Route::get('/postazioni/{postazione}/qrcode', [DownloadController::class, 'qrPostazione'])->name('postazioni.qrcode');
         Route::get('/turni', Livewire\Turni::class)->name('turni');
         Route::get('/presenze', Livewire\Presenze::class)->name('presenze');
+        Route::get('/presenze/clienti', Livewire\Presenze::class)->name('presenze.clienti');
+        Route::get('/presenze/operatori', Livewire\Presenze::class)->name('presenze.operatori');
         Route::get('/presenze/stampa', [DownloadController::class, 'stampaGda'])->name('presenze.stampa');
         Route::get('/presenze/esporta', [DownloadController::class, 'presenze'])->name('presenze.esporta');
         Route::get('/presenze/ore/{tipo}/{id}', [DownloadController::class, 'oreTurni'])->whereIn('tipo', ['cliente', 'operatore'])->whereNumber('id')->name('presenze.ore');
@@ -59,11 +63,13 @@ Route::middleware('auth')->group(function () {
     Route::middleware('ruolo:operatore')->get('/miei-turni', Livewire\Turni::class)->name('miei-turni');
 
     Route::middleware('ruolo:super_admin,admin')->group(function () {
-        Route::get('/dashboard', Livewire\Dashboard::class)->name('dashboard');
         Route::get('/clienti', Livewire\Clienti::class)->name('clienti');
         Route::get('/operatori', Livewire\Operatori::class)->name('operatori');
         Route::get('/messaggi', Livewire\Messaggi::class)->name('messaggi');
         Route::get('/messaggi/modelli', Livewire\ModelliMessaggio::class)->name('messaggi.modelli');
+        Route::get('/messaggi/{canale}', Livewire\Messaggi::class)
+            ->whereIn('canale', ['sms', 'email'])
+            ->name('messaggi.canale');
         Route::get('/impostazioni', Livewire\Impostazioni::class)->name('impostazioni');
     });
 

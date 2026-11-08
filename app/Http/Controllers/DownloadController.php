@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Legacy\Admin;
 use App\Models\Legacy\Cliente;
+use App\Models\Legacy\Codice;
 use App\Models\Legacy\Config;
 use App\Models\Legacy\Documento;
 use App\Models\Legacy\DocumentoView;
@@ -12,8 +13,10 @@ use App\Models\Legacy\Postazione;
 use App\Models\Legacy\Sede;
 use App\Models\Legacy\Turno;
 use App\Models\User;
+use App\Services\QrSede;
 use App\Services\RegistroGda;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
@@ -65,6 +68,33 @@ class DownloadController extends Controller
         return Storage::disk(config('filesystems.files_disk'))->response($percorso, null, ['Cache-Control' => 'private, max-age=3600']);
     }
 
+    public function qrSede(Sede $sede, QrSede $qr)
+    {
+        $this->autorizzaSede((int) $sede->id_cliente);
+
+        return $this->scaricaQr($sede->codice, $qr);
+    }
+
+    public function qrPostazione(Postazione $postazione, QrSede $qr)
+    {
+        $this->autorizzaSede((int) $postazione->id_cliente);
+
+        return $this->scaricaQr($postazione->codice, $qr);
+    }
+
+    private function scaricaQr(?Codice $codice, QrSede $qr)
+    {
+        abort_unless($codice, 404, 'Nessun QR associato.');
+        $percorso = $qr->percorso($codice->codice);
+        $disco = Storage::disk(config('filesystems.files_disk'));
+        abort_unless($disco->exists($percorso), 404, "L'immagine QR non è disponibile nello storage.");
+
+        return $disco->download($percorso, basename($percorso), [
+            'Cache-Control' => 'private, no-store',
+            'Content-Type' => 'application/octet-stream',
+        ]);
+    }
+
     private function autorizzaSede(int $clienteId): void
     {
         abort_unless(Cliente::visibiliA(auth()->user())->whereKey($clienteId)->exists(), 403);
@@ -74,31 +104,59 @@ class DownloadController extends Controller
     {
         $corrente = auth()->user();
         abort_unless($corrente->id === $user->id || $corrente->isStaff(), 403);
-        $percorso = trim(config('filesystems.private_paths.avatars'), '/').'/'.basename((string) $user->foto_path);
-        abort_unless($user->foto_path && Storage::disk(config('filesystems.files_disk'))->exists($percorso), 404);
+        $directoryAvatar = trim(config('filesystems.private_paths.avatars'), '/');
+        $percorso = $user->foto_path ? $directoryAvatar.'/'.basename($user->foto_path) : null;
+        $disco = Storage::disk(config('filesystems.files_disk'));
 
-        return Storage::disk(config('filesystems.files_disk'))->response($percorso, null, ['Cache-Control' => 'private, max-age=3600']);
+        if (! $percorso || ! $disco->exists($percorso)) {
+            $percorso = $directoryAvatar.'/default.jpg';
+        }
+
+        abort_unless($disco->exists($percorso), 404);
+
+        return $disco->response($percorso, null, ['Cache-Control' => 'private, max-age=3600']);
     }
 
     /** Registro GDA di un cliente/sede: pagina A4 orizzontale da stampare o salvare in PDF (actionStampa di Yii). */
     public function stampaGda(Request $request, RegistroGda $registro)
     {
         $user = auth()->user();
+        $filtri = $request->validate([
+            'cliente' => ['nullable', 'integer', 'min:1'],
+            'sede' => ['nullable', 'integer', 'min:1'],
+            'operatore' => ['nullable', 'integer', 'min:1'],
+            'da' => ['nullable', 'date'],
+            'a' => ['nullable', 'date', 'after_or_equal:da'],
+        ]);
+        abort_if(
+            ! $user->isCliente()
+                && empty($filtri['cliente'])
+                && empty($filtri['sede'])
+                && empty($filtri['operatore']),
+            422,
+            'Seleziona un cliente, una sede o un operatore.',
+        );
+
         $visibili = Cliente::visibiliA($user);
 
-        $sede = $request->integer('sede') ?: null;
-        $idCliente = $request->integer('cliente') ?: null;
+        $sede = (int) ($filtri['sede'] ?? 0) ?: null;
+        $idCliente = (int) ($filtri['cliente'] ?? 0) ?: null;
         $idCliente ??= $sede ? Sede::whereKey($sede)->value('id_cliente') : null;
         $idCliente ??= $user->isCliente() ? $user->id_cliente : null;
 
-        abort_unless($idCliente, 422, 'Seleziona un cliente o una sede.');
-
-        $cliente = (clone $visibili)->with(['comune', 'provincia'])->findOrFail($idCliente);
+        $cliente = $idCliente ? (clone $visibili)->with(['comune', 'provincia'])->findOrFail($idCliente) : null;
 
         return view('stampe.gda', [
             'azienda' => Config::first(),
             'cliente' => $cliente,
-            'turni' => $registro->turni($user, $request->date('da'), $request->date('a'), $cliente->id, $sede, $request->integer('operatore') ?: null),
+            'turni' => $registro->turni(
+                $user,
+                isset($filtri['da']) ? Carbon::parse($filtri['da']) : null,
+                isset($filtri['a']) ? Carbon::parse($filtri['a']) : null,
+                $cliente?->id,
+                $sede,
+                (int) ($filtri['operatore'] ?? 0) ?: null,
+            ),
         ]);
     }
 

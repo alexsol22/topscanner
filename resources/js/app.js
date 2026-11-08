@@ -1,80 +1,46 @@
 // Livewire include Alpine e navigazione
 import jsQR from 'jsqr';
+import $ from 'jquery';
+import select2 from 'select2';
+import 'select2/dist/css/select2.min.css';
+
+window.$ = window.jQuery = $;
+select2(window, $);
+
+function inizializzaSelect2Qr(radice = document) {
+    const select = radice.matches?.('.select2-qr') ? [radice] : radice.querySelectorAll?.('.select2-qr');
+
+    $(select ?? []).each(function () {
+        if (!$(this).hasClass('select2-hidden-accessible')) {
+            $(this).select2({ width: '100%' });
+        }
+    });
+}
+
+function distruggiSelect2Qr(radice) {
+    const select = radice.matches?.('.select2-qr') ? [radice] : radice.querySelectorAll?.('.select2-qr');
+
+    $(select ?? []).each(function () {
+        if ($(this).hasClass('select2-hidden-accessible')) {
+            $(this).select2('destroy');
+        }
+    });
+}
+
+function collegaSelect2Qr() {
+    if (!window.Livewire || window.select2QrCollegato) return;
+
+    window.select2QrCollegato = true;
+    window.Livewire.hook('morphed', ({ el }) => inizializzaSelect2Qr(el));
+    window.Livewire.hook('morph.removing', ({ el }) => distruggiSelect2Qr(el));
+    inizializzaSelect2Qr();
+}
+
+document.addEventListener('livewire:init', collegaSelect2Qr);
+document.addEventListener('livewire:initialized', collegaSelect2Qr);
+collegaSelect2Qr();
 
 document.addEventListener('alpine:init', () => {
-    window.Alpine.data('navSearch', (items) => ({
-        items,
-        ricerca: '',
-        aperta: false,
-        indice: -1,
-
-        init() {
-            this.$watch('ricerca', () => { this.indice = -1; });
-        },
-
-        normalizza(value) {
-            return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('it');
-        },
-
-        distanza(a, b) {
-            const riga = Array.from({ length: b.length + 1 }, (_, i) => i);
-            for (let i = 1; i <= a.length; i++) {
-                let diagonale = riga[0];
-                riga[0] = i;
-                for (let j = 1; j <= b.length; j++) {
-                    const sopra = riga[j];
-                    riga[j] = Math.min(riga[j] + 1, riga[j - 1] + 1, diagonale + (a[i - 1] === b[j - 1] ? 0 : 1));
-                    diagonale = sopra;
-                }
-            }
-            return riga[b.length];
-        },
-
-        risultati() {
-            const query = this.normalizza(this.ricerca.trim());
-            if (!query) return [];
-
-            const termini = query.split(/\s+/);
-            return this.items.map((voce) => {
-                const titolo = this.normalizza(voce.nome);
-                const parole = this.normalizza(`${voce.nome} ${voce.gruppo} ${voce.paroleChiave}`)
-                    .split(/[^a-z0-9]+/)
-                    .filter(Boolean);
-                let punteggio = 0;
-
-                for (const termine of termini) {
-                    const corrispondenza = parole.reduce((migliore, parola) => {
-                        if (parola === termine) return Math.max(migliore, 100);
-                        if (parola.startsWith(termine)) return Math.max(migliore, 80);
-                        if (parola.includes(termine)) return Math.max(migliore, 60);
-                        if (termine.length >= 4 && this.distanza(parola, termine) <= 1) return Math.max(migliore, 45);
-                        return migliore;
-                    }, 0);
-
-                    if (!corrispondenza) return null;
-                    punteggio += corrispondenza;
-                }
-
-                if (titolo.startsWith(query)) punteggio += 30;
-                return { ...voce, punteggio };
-            })
-                .filter(Boolean)
-                .sort((a, b) => b.punteggio - a.punteggio || a.nome.localeCompare(b.nome, 'it'))
-                .slice(0, 7);
-        },
-
-        sposta(direzione) {
-            const totale = this.risultati().length;
-            if (!totale) return;
-            this.indice = (this.indice + direzione + totale) % totale;
-        },
-
-        vaiAlRisultato() {
-            const voce = this.risultati()[this.indice] ?? this.risultati()[0];
-            if (voce) window.location.assign(voce.url);
-        },
-    }));
-
     window.Alpine.data('scanner', () => ({
         camera: false, stream: null, caricamento: false, errore: null,
         gps: 'attesa', lat: null, lng: null, ultimo: 0,

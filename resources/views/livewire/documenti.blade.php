@@ -1,26 +1,25 @@
 <div class="space-y-5">
     @if (auth()->user()->isStaff())
-        <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <x-ui.filtri :values="['filtroCliente' => $filtroCliente, 'filtroOperatore' => $filtroOperatore, 'filtroTipologia' => $filtroTipologia, 'filtroDescrizione' => $filtroDescrizione]">
+           <div class="grid gap-3 sm:grid-cols-2">
             <div>
                 <label class="label">Cliente</label>
-                <x-ui.select-search model="filtroCliente" :live="true" placeholder="Scegli" :options="$clienti->map(fn ($c) => ['id' => (string) $c->id, 'nome' => $c->ragione_sociale])->values()" />
+                <x-ui.select-search model="filtroCliente" :draft="true" placeholder="Scegli" :options="$clienti->map(fn ($c) => ['id' => (string) $c->id, 'nome' => $c->ragione_sociale])->values()" />
             </div>
             <div>
                 <label class="label">Operatore</label>
-                <x-ui.select-search model="filtroOperatore" :live="true" placeholder="Scegli" :options="$operatori->map(fn ($o) => ['id' => (string) $o->id, 'nome' => $o->nome_completo])->values()" />
+                <x-ui.select-search model="filtroOperatore" :draft="true" placeholder="Scegli" :options="$operatori->map(fn ($o) => ['id' => (string) $o->id, 'nome' => $o->nome_completo])->values()" />
             </div>
             <div>
                 <label class="label">Tipologia</label>
-                <x-ui.select-search model="filtroTipologia" :live="true" placeholder="Scegli" :options="$tipologie->map(fn ($t) => ['id' => (string) $t->id, 'nome' => $t->nome])->values()" />
+                <x-ui.select-search model="filtroTipologia" :draft="true" placeholder="Scegli" :options="$tipologie->map(fn ($t) => ['id' => (string) $t->id, 'nome' => $t->nome])->values()" />
             </div>
             <div>
                 <label for="filtro-descrizione" class="label">Descrizione</label>
-                <input id="filtro-descrizione" type="search" wire:model.live.debounce.300ms="filtroDescrizione" placeholder="Cerca descrizione..." class="input">
+                <input id="filtro-descrizione" type="search" x-model="valori.filtroDescrizione" placeholder="Cerca descrizione..." class="input">
             </div>
-        </div>
-        <div class="flex justify-end">
-            <button wire:click="nuovo" class="btn-primary">+ Carica documento</button>
-        </div>
+           </div>
+        </x-ui.filtri>
     @endif
 
     <section aria-label="Elenco documenti" class="card overflow-hidden">

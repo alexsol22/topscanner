@@ -20,96 +20,146 @@
             @endif
         </x-ui.conferma-eliminazione>
     @endif
-    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div class="flex flex-1 flex-col gap-2 sm:flex-row">
-            <input type="search" wire:model.live.debounce.300ms="cerca" placeholder="Cerca sede o città…" class="input sm:max-w-xs">
-            @unless (auth()->user()->isCliente())
-                <x-ui.select-search model="filtroCliente" :live="true" placeholder="Tutti i clienti" :options="$clienti->map(fn ($c) => ['id' => (string) $c->id, 'nome' => $c->ragione_sociale])->values()" class="sm:w-72" />
-            @endunless
-        </div>
-        @if (auth()->user()->isStaff())<button wire:click="esporta" class="btn-soft">Esporta CSV</button>@endif
-        @if (auth()->user()->isStaff()) <a href="{{ route('sedi.crea', array_filter(['cliente' => $filtroCliente])) }}" wire:navigate class="btn-primary">+ Nuova sede</a> @endif
-    </div>
-
-    <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-        @forelse ($sedi as $s)
-            <div wire:key="s{{ $s->id }}" class="card flex flex-col p-4 sm:p-5">
-                <div class="flex items-start gap-4">
-                    <div class="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-sky-100 text-sky-600 ring-2 ring-white shadow sm:h-16 sm:w-16">
-                        @if ($s->foto)
-                            <img src="{{ route('sedi.foto', $s->id) }}" alt="" class="h-full w-full object-cover">
-                        @else
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-4h6v4M9 10h.01M12 10h.01M15 10h.01M9 13h.01M12 13h.01M15 13h.01"/></svg>
-                        @endif
-                    </div>
-                    <div class="min-w-0 flex-1">
-                        <p class="truncate text-xs font-semibold uppercase tracking-wide text-sky-600">{{ $s->cliente->ragione_sociale }}</p>
-                        <h3 class="truncate text-lg font-bold text-slate-800">{{ $s->descrizione }}</h3>
-                        <p class="truncate text-sm text-slate-500">{{ trim($s->indirizzo.' '.$s->citta) ?: '—' }}</p>
-                    </div>
-                </div>
-                <div class="mt-3 flex flex-wrap gap-2 text-xs">
-                    <span class="rounded-full bg-sky-50 px-2.5 py-1 font-medium text-sky-700">{{ $s->postazioni_count }} postazioni</span>
-                    <span class="rounded-full bg-sky-50 px-2.5 py-1 font-medium text-sky-700">{{ $s->turni_count }} turni · {{ $s->turni_conclusi_count }} conclusi</span>
-                    @if (! $s->lat && ! $s->lng)<span class="rounded-full bg-amber-50 px-2.5 py-1 font-medium text-amber-700">senza coordinate</span>@endif
-                    <span class="rounded-full bg-sky-50 px-2.5 py-1 font-medium text-sky-700">raggio {{ $s->distanza_max }} m</span>
-                    <span class="rounded-full bg-sky-50 px-2.5 py-1 font-medium text-sky-700">{{ collect($s->ore_richieste)->sum() }} h/sett.</span>
-                </div>
-                <div class="mt-4 flex flex-wrap gap-2">
-                    <button wire:click="postazioni({{ $s->id }})" class="btn-soft !px-3 !py-1.5">QR e postazioni</button>
-                    @if (auth()->user()->isStaff())
-                        <button wire:click="qr({{ $s->id }})" class="btn-soft !px-3 !py-1.5">Genera QR</button>
-                        <a href="{{ route('sedi.modifica', $s) }}" wire:navigate class="btn-soft !px-3 !py-1.5">Modifica</a>
-                        <button wire:click="richiediEliminazione({{ $s->id }})" class="btn-danger !px-3 !py-1.5">Elimina</button>
-                    @endif
-                </div>
+    @if (! $clienteCorrente)
+        <div class="card flex flex-col items-start gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+                <h2 class="text-lg font-bold text-slate-800">Seleziona un cliente</h2>
+                <p class="mt-1 text-sm text-slate-500">Apri le sedi dal link presente nella scheda del cliente.</p>
             </div>
-        @empty
-            <p class="card col-span-full p-10 text-center text-sm text-slate-500">Nessuna sede trovata.</p>
-        @endforelse
-    </div>
-    {{ $sedi->links() }}
+            @if (auth()->user()->isStaff())
+                <a href="{{ route('clienti') }}" wire:navigate class="btn-primary">Vai ai clienti</a>
+            @endif
+        </div>
+    @else
+        <div class="card flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+            <div class="min-w-0">
+                @if (auth()->user()->isStaff())
+                    <a href="{{ route('clienti') }}" wire:navigate class="mb-2 inline-flex items-center gap-1 text-sm font-medium text-sky-700 hover:underline">← Torna ai clienti</a>
+                @endif
+                <p class="text-xs font-bold uppercase tracking-wider text-sky-600">{{ $clienteCorrente->ragione_sociale }}</p>
+                <h2 class="mt-1 text-xl font-bold text-slate-800">Elenco sedi</h2>
+                <p class="mt-1 text-sm text-slate-500">{{ $sedi->total() }} {{ $sedi->total() === 1 ? 'sede' : 'sedi' }} associate</p>
+            </div>
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+                @if (auth()->user()->isStaff())
+                    <button wire:click="esporta" class="btn-soft">Esporta CSV</button>
+                    <a href="{{ route('sedi.crea', ['cliente' => $clienteCorrente->id]) }}" wire:navigate class="btn-primary">+ Nuova sede</a>
+                @endif
+            </div>
+        </div>
+
+        <x-ui.filtri :values="['filtroDenominazione' => $filtroDenominazione, 'filtroEmail' => $filtroEmail, 'filtroTelefono' => $filtroTelefono]">
+          <div class="grid gap-4 sm:grid-cols-2">
+            <x-ui.field label="Denominazione" name="filtroDenominazione">
+                <input type="search" x-model="valori.filtroDenominazione" class="input" placeholder="Cerca per denominazione">
+            </x-ui.field>
+            <x-ui.field label="Email" name="filtroEmail">
+                <input type="search" x-model="valori.filtroEmail" class="input" placeholder="Cerca per email">
+            </x-ui.field>
+            <x-ui.field label="Telefono" name="filtroTelefono">
+                <input type="search" x-model="valori.filtroTelefono" class="input" placeholder="Cerca per telefono" inputmode="tel">
+            </x-ui.field>
+          </div>
+        </x-ui.filtri>
+
+        <div class="space-y-4">
+            @forelse ($sedi as $s)
+                <article wire:key="s{{ $s->id }}" class="card overflow-hidden">
+                    <div class="grid md:grid-cols-[12rem_minmax(0,1fr)]">
+                        <div class="min-h-48 bg-sky-50 md:min-h-full">
+                            @if ($s->foto)
+                                <img src="{{ route('sedi.foto', $s->id) }}" alt="Foto di {{ $s->descrizione }}" class="h-48 w-full object-cover md:h-full">
+                            @else
+                                <div class="flex h-48 items-center justify-center text-sky-500 md:h-full">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-4h6v4M9 10h.01M12 10h.01M15 10h.01M9 13h.01M12 13h.01M15 13h.01"/></svg>
+                                </div>
+                            @endif
+                        </div>
+                        <div class="flex min-w-0 flex-col p-5 sm:p-6">
+                            <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                <div class="min-w-0">
+                                    <h3 class="truncate text-xl font-bold text-slate-800">{{ $s->descrizione }}</h3>
+                                    <p class="mt-1 text-sm text-slate-600">{{ trim($s->indirizzo.' '.$s->cap.' '.$s->citta.' '.$s->provincia_sigla) ?: 'Indirizzo non disponibile' }}</p>
+                                </div>
+                                @if ($s->codice)
+                                    <span class="shrink-0 rounded-lg bg-slate-50 px-3 py-1.5 font-mono text-xs text-slate-500">{{ $s->codice->codice }}</span>
+                                @endif
+                            </div>
+
+                            <div class="mt-4 grid gap-2 text-sm text-slate-600 sm:grid-cols-2">
+                                @if ($s->email)<p class="truncate"><span class="font-medium text-slate-700">Email:</span> {{ $s->email }}</p>@endif
+                                @if ($s->telefono)<p><span class="font-medium text-slate-700">Telefono:</span> {{ $s->telefono }}</p>@endif
+                            </div>
+
+                            <div class="mt-5 flex flex-wrap gap-2 border-t border-sky-50 pt-4">
+                                @if ($s->turni_count > 0)
+                                    <a href="{{ route('turni', ['sede' => $s->id]) }}" wire:navigate class="btn-soft !px-3 !py-1.5">Visualizza agenda pos</a>
+                                @endif
+                                @if ($s->turni_conclusi_count > 0)
+                                    <a href="{{ route('presenze', ['sede' => $s->id]) }}" wire:navigate class="btn-soft !px-3 !py-1.5">Visualizza GDA</a>
+                                @endif
+                                <button wire:click="postazioni({{ $s->id }})" class="btn-soft !px-3 !py-1.5">Scarica QR</button>
+                                @if (auth()->user()->isStaff())
+                                    <a href="{{ route('sedi.modifica', ['sede' => $s, 'cliente' => $clienteCorrente->id]) }}" wire:navigate class="btn-soft !px-3 !py-1.5">Modifica sede</a>
+                                    <button wire:click="richiediEliminazione({{ $s->id }})" class="btn-danger !px-3 !py-1.5">Elimina sede</button>
+                                @endif
+                            </div>
+                        </div>
+                    </div>
+                </article>
+            @empty
+                <p class="card p-10 text-center text-sm text-slate-500">Nessuna sede trovata per {{ $clienteCorrente->ragione_sociale }}.</p>
+            @endforelse
+        </div>
+        {{ $sedi->links() }}
+    @endif
 
     @if ($modalPostazioni && $sedeCorrente)
         <div class="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 backdrop-blur-sm sm:items-center sm:p-4">
             <div class="max-h-[92vh] w-full overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl sm:max-w-2xl sm:rounded-3xl sm:p-6">
                 <div class="mb-4 flex items-center justify-between">
-                    <h3 class="text-lg font-bold text-slate-800">{{ $sedeCorrente->descrizione }} · codici QR</h3>
+                    <h3 class="text-lg font-bold text-slate-800">Qrcode {{ $sedeCorrente->descrizione }}</h3>
                     <button wire:click="$set('modalPostazioni', false)" class="rounded-lg p-1 text-slate-400 hover:bg-sky-50">✕</button>
                 </div>
-                <div class="grid gap-4 sm:grid-cols-2">
-                    <div class="rounded-2xl bg-sky-50 p-4 text-center">
-                        <p class="mb-2 text-sm font-semibold text-slate-700">Sede (inizio/fine turno)</p>
-                        @if ($sedeCorrente->codice)<div class="mx-auto w-40">{!! $sedeCorrente->codice->svg(160) !!}</div><p class="mt-1 font-mono text-xs text-slate-500">{{ $sedeCorrente->codice->codice }}</p>@endif
-                    </div>
-                    @foreach ($sedeCorrente->postazioni as $post)
-                        <div wire:key="p{{ $post->id }}" class="rounded-2xl bg-sky-50 p-4 text-center">
-                            <p class="mb-2 text-sm font-semibold text-slate-700">{{ $post->titolo }} @if ($post->minuti_passaggio)<span class="text-xs font-normal text-slate-500">· ogni {{ $post->minuti_passaggio }} min</span>@endif</p>
-                            @if ($post->codice)<div class="mx-auto w-40">{!! $post->codice->svg(160) !!}</div><p class="mt-1 font-mono text-xs text-slate-500">{{ $post->codice->codice }}</p>@endif
-                            @if (auth()->user()->isStaff())<button wire:click="eliminaPostazione({{ $post->id }})" wire:confirm="Eliminare la postazione?" class="btn-danger mt-2 !px-3 !py-1">Elimina</button>@endif
-                        </div>
-                    @endforeach
+                <div class="overflow-x-auto">
+                    <table class="w-full border-collapse text-left text-sm">
+                        <thead>
+                            <tr class="border-b border-sky-100 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                <th scope="col" class="px-4 py-3">Postazione</th>
+                                <th scope="col" class="w-20 px-4 py-3 text-center">Scarica</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-sky-50">
+                            <tr>
+                                <td class="px-4 py-3 text-slate-700">
+                                    <span class="font-semibold">Postazione principale</span><br>
+                                    <span>{{ strtoupper(trim(implode(' ', array_filter([$sedeCorrente->indirizzo, $sedeCorrente->cap, $sedeCorrente->comune?->comune, $sedeCorrente->provincia?->sigla ? '('.$sedeCorrente->provincia->sigla.')' : null])))) }}</span>
+                                </td>
+                                <td class="px-4 py-3 text-center">
+                                    @if ($sedeCorrente->codice)
+                                        <a href="{{ route('sedi.qrcode', $sedeCorrente) }}" aria-label="Scarica QR postazione principale" class="inline-flex rounded-lg p-2 text-sky-700 hover:bg-sky-50">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0 4-4m-4 4-4-4M5 17v3h14v-3"/></svg>
+                                        </a>
+                                    @endif
+                                </td>
+                            </tr>
+                            @foreach ($sedeCorrente->postazioni as $post)
+                                <tr wire:key="qr-postazione-{{ $post->id }}">
+                                    <td class="px-4 py-3 text-slate-700">{{ $post->titolo }}</td>
+                                    <td class="px-4 py-3 text-center">
+                                        @if ($post->codice)
+                                            <a href="{{ route('postazioni.qrcode', $post) }}" aria-label="Scarica QR {{ $post->titolo }}" class="inline-flex rounded-lg p-2 text-sky-700 hover:bg-sky-50">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0 4-4m-4 4-4-4M5 17v3h14v-3"/></svg>
+                                            </a>
+                                        @endif
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
                 </div>
-                @if (auth()->user()->isStaff())
-                    <form wire:submit="aggiungiPostazione" class="mt-5 grid gap-3 border-t border-sky-100 pt-4 sm:grid-cols-3">
-                        <x-ui.field label="Nuova postazione" name="p.titolo" class="sm:col-span-2"><input wire:model="p.titolo" class="input"></x-ui.field>
-                        <x-ui.field label="Ogni (min)" name="p.minuti_passaggio"><input wire:model="p.minuti_passaggio" class="input" inputmode="numeric"></x-ui.field>
-                        <button class="btn-primary sm:col-span-3">Aggiungi postazione</button>
-                    </form>
-                @endif
             </div>
         </div>
     @endif
 
-    @if ($sedeQr)
-        <div class="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 backdrop-blur-sm sm:items-center sm:p-4" @keydown.escape.window="$wire.chiudiQr()">
-            <div class="max-h-[92vh] w-full overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl sm:max-w-3xl sm:rounded-3xl sm:p-6">
-                <div class="mb-4 flex items-center justify-between">
-                    <h3 class="text-lg font-bold text-slate-800">Genera QR sede</h3>
-                    <button type="button" wire:click="chiudiQr" class="rounded-lg p-1 text-slate-400 hover:bg-sky-50 hover:text-slate-600">✕</button>
-                </div>
-                <livewire:generatore-qr :sede="$sedeQr" :key="'gen'.$sedeQr" />
-            </div>
-        </div>
-    @endif
 </div>

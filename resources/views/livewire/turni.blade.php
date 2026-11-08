@@ -1,12 +1,46 @@
 @php($staff = auth()->user()->isStaff())
 <div class="space-y-5">
-    <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div class="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:flex-1">
-            @if ($vista === 'lista')
-                <div><label class="label">Dal</label><input type="date" wire:model.live="da" class="input"></div>
-                <div><label class="label">Al</label><input type="date" wire:model.live="a" class="input"></div>
-            @endif
+    <h1 class="text-2xl font-bold tracking-tight text-slate-800">
+        Agenda Pos
+        @if ($clienteSelezionato)
+            <span class="text-base font-semibold">Cliente: <span class="text-sky-600">{{ $clienteSelezionato->ragione_sociale }}</span></span>
+        @endif
+        @if ($sedeSelezionata)
+            <span class="text-base font-semibold">Sede: <span class="text-sky-600">{{ $sedeSelezionata->descrizione }}</span></span>
+        @endif
+        @if ($operatoreSelezionato)
+            <span class="text-base font-semibold">Operatore: <span class="text-sky-600">{{ $operatoreSelezionato->nome_completo }}</span></span>
+        @endif
+        @if ($filtroStato !== '' && isset(\App\Models\Legacy\Turno::etichette()[$filtroStato]))
+            <span class="text-base font-semibold">Stato: <span class="text-sky-600">{{ \App\Models\Legacy\Turno::etichette()[$filtroStato][0] }}</span></span>
+        @endif
+        @if ($totaleOreAgenda !== null)
+            <span class="text-base font-semibold">Totale ore: <span class="text-sky-600">{{ number_format($totaleOreAgenda, 2, '.', '') }}</span></span>
+            <span class="text-xs font-medium text-slate-500">{{ $da || $a ? '(intervallo selezionato)' : '(tutti i periodi)' }}</span>
+        @endif
+    </h1>
+    <div class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-sky-200 bg-white p-3 shadow-sm sm:p-4">
+      <div class="flex min-w-0 flex-wrap items-center gap-2">
+        <x-ui.filtri :values="array_merge(
+            ['da' => $da, 'a' => $a, 'filtroStato' => $filtroStato],
+            ! auth()->user()->isOperatore() ? ['filtroSede' => $filtroSede, 'filtroOperatore' => $filtroOperatore] : [],
+            $staff ? ['filtroCliente' => $filtroCliente] : [],
+        )">
+        <div class="grid gap-3 sm:grid-cols-2">
+            <div>
+                <label class="label" for="filtro-stato">Stato turno</label>
+                <select id="filtro-stato" x-model="valori.filtroStato" class="input">
+                    <option value="">Scegli</option>
+                    @foreach (\App\Models\Legacy\Turno::etichette() as $chiave => [$etichettaStato])<option value="{{ $chiave }}">{{ $etichettaStato }}</option>@endforeach
+                </select>
+            </div>
             @unless (auth()->user()->isOperatore())
+                @if ($staff)
+                    <div>
+                        <label class="label">Cliente</label>
+                        <x-select-ricerca model="filtroCliente" :draft="true" :options="$clienti->map(fn ($c) => ['id' => $c->id, 'label' => $c->ragione_sociale])->values()" placeholder="Tutti i clienti" />
+                    </div>
+                @endif
                 <div class="relative space-y-1" x-data="{
                     aperto: false,
                     ricerca: '',
@@ -16,14 +50,14 @@
                         return this.opzioni.filter(opzione => opzione.search.toLocaleLowerCase('it').includes(termine)).slice(0, 20);
                     },
                     seleziona(id) {
-                        $wire.selezionaSuggerimento('sede', id);
+                        this.valori.filtroSede = id;
                         this.aperto = false;
                         this.ricerca = '';
                     }
-                }" @click.outside="aperto = false" @keydown.escape.window="aperto = false">
+                }" @click.outside="aperto = false" @keydown.escape="if (aperto) { $event.stopPropagation(); aperto = false; }">
                     <label class="label" for="filtro-sede">Sede</label>
                     <button id="filtro-sede" type="button" role="combobox" aria-controls="suggerimenti-sedi" :aria-expanded="aperto" @click="aperto = !aperto; if (aperto) $nextTick(() => $refs.ricerca.focus())" class="input flex items-center justify-between text-left">
-                        <span class="{{ $sedeSelezionata ? 'text-slate-800' : 'text-slate-500' }}">{{ $sedeSelezionata?->descrizione ?? 'Tutte le sedi' }}</span>
+                        <span x-text="opzioni.find(opzione => String(opzione.id) === String(valori.filtroSede))?.label ?? 'Tutte le sedi'"></span>
                         <span aria-hidden="true" class="text-slate-400">⌄</span>
                     </button>
                     <div x-cloak x-show="aperto" class="absolute inset-x-0 top-full z-30 mt-1 overflow-hidden rounded-xl border border-sky-100 bg-white shadow-lg">
@@ -32,7 +66,7 @@
                         </div>
                         <ul id="suggerimenti-sedi" role="listbox" class="max-h-60 overflow-y-auto p-1">
                             <li role="option">
-                                <button type="button" @click="$wire.rimuoviFiltro('sede'); aperto = false; ricerca = ''" class="block w-full rounded-lg px-3 py-2 text-left text-sm text-slate-500 hover:bg-sky-50">Tutte le sedi</button>
+                                <button type="button" @click="valori.filtroSede = null; aperto = false; ricerca = ''" class="block w-full rounded-lg px-3 py-2 text-left text-sm text-slate-500 hover:bg-sky-50">Tutte le sedi</button>
                             </li>
                             <template x-for="opzione in filtrati()" :key="opzione.id">
                                 <li role="option">
@@ -55,14 +89,14 @@
                         return this.opzioni.filter(opzione => opzione.search.toLocaleLowerCase('it').includes(termine)).slice(0, 20);
                     },
                     seleziona(id) {
-                        $wire.selezionaSuggerimento('operatore', id);
+                        this.valori.filtroOperatore = id;
                         this.aperto = false;
                         this.ricerca = '';
                     }
-                }" @click.outside="aperto = false" @keydown.escape.window="aperto = false">
+                }" @click.outside="aperto = false" @keydown.escape="if (aperto) { $event.stopPropagation(); aperto = false; }">
                     <label class="label" for="filtro-operatore">Operatore</label>
                     <button id="filtro-operatore" type="button" role="combobox" aria-controls="suggerimenti-operatori" :aria-expanded="aperto" @click="aperto = !aperto; if (aperto) $nextTick(() => $refs.ricerca.focus())" class="input flex items-center justify-between text-left">
-                        <span class="{{ $operatoreSelezionato ? 'text-slate-800' : 'text-slate-500' }}">{{ $operatoreSelezionato?->nome_completo ?? 'Tutti gli operatori' }}</span>
+                        <span x-text="opzioni.find(opzione => String(opzione.id) === String(valori.filtroOperatore))?.label ?? 'Tutti gli operatori'"></span>
                         <span aria-hidden="true" class="text-slate-400">⌄</span>
                     </button>
                     <div x-cloak x-show="aperto" class="absolute inset-x-0 top-full z-30 mt-1 overflow-hidden rounded-xl border border-sky-100 bg-white shadow-lg">
@@ -71,7 +105,7 @@
                         </div>
                         <ul id="suggerimenti-operatori" role="listbox" class="max-h-60 overflow-y-auto p-1">
                             <li role="option">
-                                <button type="button" @click="$wire.rimuoviFiltro('operatore'); aperto = false; ricerca = ''" class="block w-full rounded-lg px-3 py-2 text-left text-sm text-slate-500 hover:bg-sky-50">Tutti gli operatori</button>
+                                <button type="button" @click="valori.filtroOperatore = null; aperto = false; ricerca = ''" class="block w-full rounded-lg px-3 py-2 text-left text-sm text-slate-500 hover:bg-sky-50">Tutti gli operatori</button>
                             </li>
                             <template x-for="opzione in filtrati()" :key="opzione.id">
                                 <li role="option">
@@ -85,22 +119,43 @@
                         </ul>
                     </div>
                 </div>
-                @if ($staff)
-                    <div>
-                        <label class="label" for="filtro-cliente">Cliente</label>
-                        <select id="filtro-cliente" wire:model.live="filtroCliente" class="input"><option value="">Tutti i clienti</option>@foreach ($clienti as $c)<option value="{{ $c->id }}">{{ $c->ragione_sociale }}</option>@endforeach</select>
-                    </div>
-                @endif
-                <div>
-                    <label class="label" for="filtro-stato">Stato</label>
-                    <select id="filtro-stato" wire:model.live="filtroStato" class="input">
-                        <option value="">Tutti gli stati</option>
-                        @foreach (\App\Models\Legacy\Turno::etichette() as $chiave => [$etichettaStato])<option value="{{ $chiave }}">{{ $etichettaStato }}</option>@endforeach
-                    </select>
-                </div>
             @endunless
+            <div><label class="label" for="filtro-dal">Dal</label><input id="filtro-dal" type="date" x-model="valori.da" :max="valori.a || null" class="input"></div>
+            <div><label class="label" for="filtro-al">Al</label><input id="filtro-al" type="date" x-model="valori.a" :min="valori.da || null" class="input"></div>
         </div>
-        <div class="flex items-center gap-2">
+        </x-ui.filtri>
+      @if ($vista === 'calendario')
+        <div class="flex shrink-0 items-center gap-1.5" role="group" aria-label="Filtra turni per stato">
+            <button
+                type="button"
+                wire:click="$set('filtroStato', '')"
+                aria-label="Azzera filtro stato"
+                title="Azzera filtro stato"
+                class="rounded-lg px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-400"
+            >Azzera</button>
+            @foreach (\App\Models\Legacy\Turno::etichette() as $chiave => [$etichettaStato])
+                <button
+                    type="button"
+                    wire:click="$set('filtroStato', '{{ $filtroStato === $chiave ? '' : $chiave }}')"
+                    aria-label="Filtra turni: {{ $etichettaStato }}"
+                    title="{{ $etichettaStato }}"
+                    aria-pressed="{{ $filtroStato === $chiave ? 'true' : 'false' }}"
+                    @class([
+                        'size-7 shrink-0 cursor-pointer rounded-full transition hover:scale-110 focus:outline-none focus:ring-2 focus:ring-offset-2',
+                        'bg-sky-500 focus:ring-sky-500' => $chiave === 'programmato',
+                        'bg-emerald-500 focus:ring-emerald-500' => $chiave === 'in_corso',
+                        'bg-teal-500 focus:ring-teal-500' => $chiave === 'completato',
+                        'bg-amber-500 focus:ring-amber-500' => $chiave === 'non_timbrato',
+                        'bg-orange-500 focus:ring-orange-500' => $chiave === 'non_completato',
+                        'bg-rose-500 focus:ring-rose-500' => $chiave === 'non_eseguito',
+                        'ring-2 ring-offset-2' => $filtroStato === $chiave,
+                    ])
+                ></button>
+            @endforeach
+        </div>
+      @endif
+      </div>
+        <div class="flex flex-wrap items-center gap-2">
             <div class="inline-flex rounded-xl bg-white p-1 ring-1 ring-sky-200">
                 <button wire:click="$set('vista', 'calendario')" class="rounded-lg px-3 py-1.5 text-sm font-semibold {{ $vista === 'calendario' ? 'bg-sky-500 text-white' : 'text-slate-600' }}">Calendario</button>
                 <button wire:click="$set('vista', 'lista')" class="rounded-lg px-3 py-1.5 text-sm font-semibold {{ $vista === 'lista' ? 'bg-sky-500 text-white' : 'text-slate-600' }}">Lista</button>
@@ -110,31 +165,15 @@
     </div>
 
     @if ($vista === 'calendario')
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div class="inline-flex w-fit rounded-xl bg-white p-1 ring-1 ring-sky-200">
+        <div class="grid grid-cols-2 items-center gap-2 rounded-2xl border border-sky-200 bg-sky-50 p-2 shadow-sm sm:gap-3 sm:p-3 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
+            <div class="col-start-1 row-start-1 inline-flex w-fit shrink-0 rounded-xl bg-white p-1 ring-1 ring-sky-200">
                 @foreach (['mese' => 'Mese', 'settimana' => 'Settimana', 'giorno' => 'Giorno'] as $periodo => $etichetta)
-                    <button wire:click="cambiaPeriodoCalendario('{{ $periodo }}')" class="rounded-lg px-3 py-1.5 text-sm font-semibold {{ $periodoCalendario === $periodo ? 'bg-sky-500 text-white' : 'text-slate-600' }}">{{ $etichetta }}</button>
+                    <button wire:click="cambiaPeriodoCalendario('{{ $periodo }}')" class="rounded-lg px-1.5 py-1 text-[11px] font-semibold sm:px-3 sm:py-1.5 sm:text-sm {{ $periodoCalendario === $periodo ? 'bg-sky-500 text-white' : 'text-slate-600' }}">{{ $etichetta }}</button>
                 @endforeach
             </div>
-            <div class="flex flex-wrap items-center justify-end gap-2">
-                @if ($periodoCalendario === 'mese')
-                    <div>
-                        <label for="selezione-mese" class="sr-only">Scegli un mese</label>
-                        <input id="selezione-mese" type="month" wire:model.live="selezioneMese" class="input w-auto">
-                    </div>
-                @elseif ($periodoCalendario === 'settimana')
-                    <div>
-                        <label for="selezione-data" class="sr-only">Scegli una data della settimana</label>
-                        <input id="selezione-data" type="date" wire:model.live="selezioneData" class="input w-auto" aria-label="Settimana del">
-                    </div>
-                @else
-                    <div>
-                        <label for="selezione-data" class="sr-only">Scegli un giorno</label>
-                        <input id="selezione-data" type="date" wire:model.live="selezioneData" class="input w-auto">
-                    </div>
-                @endif
-                <button wire:click="cambiaPeriodo(-1)" class="btn-soft !px-3" aria-label="Periodo precedente">←</button>
-                <span class="min-w-48 text-center text-base font-bold capitalize text-slate-800">
+            <div class="col-span-2 row-start-2 flex min-w-0 items-center justify-center gap-0.5 sm:gap-2 md:col-span-1 md:col-start-2 md:row-start-1">
+                <button wire:click="cambiaPeriodo(-1)" class="btn-soft !px-2 sm:!px-3" aria-label="Periodo precedente">←</button>
+                <span class="min-w-0 flex-1 text-center text-xs font-bold capitalize leading-tight text-slate-800 sm:min-w-48 sm:flex-none sm:text-base">
                     @if ($periodoCalendario === 'mese')
                         {{ $calendario['primo']->locale('it')->translatedFormat('F Y') }}
                     @elseif ($periodoCalendario === 'settimana')
@@ -143,12 +182,14 @@
                         {{ $calendario['da']->locale('it')->translatedFormat('l d F Y') }}
                     @endif
                 </span>
-                <button wire:click="cambiaPeriodo(1)" class="btn-soft !px-3" aria-label="Periodo successivo">→</button>
-                <button wire:click="oggi" class="btn-soft">Oggi</button>
+                <button wire:click="cambiaPeriodo(1)" class="btn-soft !px-2 sm:!px-3" aria-label="Periodo successivo">→</button>
+            </div>
+            <div class="col-start-2 row-start-1 flex items-center justify-self-end gap-1 md:col-start-3">
+                <button wire:click="oggi" class="btn-soft !px-2 text-xs sm:!px-3 sm:text-sm">Oggi</button>
             </div>
         </div>
-        <div class="card overflow-hidden">
-            <div class="grid {{ $periodoCalendario === 'giorno' ? 'grid-cols-1' : 'grid-cols-7' }} border-b border-sky-100 bg-sky-50/60 text-center">
+        <div class="card overflow-hidden !ring-sky-200">
+            <div class="grid {{ $periodoCalendario === 'giorno' ? 'grid-cols-1' : 'grid-cols-7' }} border-b border-sky-200 bg-sky-100/70 text-center">
                 @if ($periodoCalendario === 'giorno')
                     <div class="py-2 text-xs font-semibold uppercase text-slate-500">{{ $calendario['da']->locale('it')->translatedFormat('l d/m') }}</div>
                 @else
@@ -159,7 +200,7 @@
                 @for ($d = $calendario['da']->copy(); $d->lte($calendario['a']); $d->addDay())
                     @php($k = $d->toDateString())
                     @php($giorno = $calendario['turni']->get($k, collect()))
-                    <div wire:key="g{{ $k }}" class="group min-h-24 border-b border-r border-sky-50 p-1 sm:min-h-32 sm:p-1.5 {{ $periodoCalendario === 'giorno' ? 'min-h-48 sm:min-h-64' : '' }} {{ $periodoCalendario === 'mese' && $d->month !== $calendario['primo']->month ? 'bg-slate-50/60' : '' }}">
+                    <div wire:key="g{{ $k }}" class="group min-h-24 border-b border-r border-sky-100 p-1 sm:min-h-32 sm:p-1.5 {{ $periodoCalendario === 'giorno' ? 'min-h-48 sm:min-h-64' : '' }} {{ $periodoCalendario === 'mese' && $d->month !== $calendario['primo']->month ? 'bg-slate-50/60' : '' }}">
                         <div class="mb-1 flex items-center justify-between">
                             <button wire:click="vaiAlGiorno('{{ $k }}')" class="flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-xs font-semibold {{ $d->isToday() ? 'bg-sky-500 text-white' : ($periodoCalendario === 'mese' && $d->month !== $calendario['primo']->month ? 'text-slate-400' : 'text-slate-700') }}" aria-label="Mostra il {{ $d->locale('it')->translatedFormat('d F Y') }}">{{ $d->day }}</button>
                             @if ($staff)<button wire:click="nuovoGiorno('{{ $k }}')" class="hidden h-5 w-5 rounded text-sky-600 hover:bg-sky-100 group-hover:block" title="Aggiungi turno">+</button>@endif
@@ -183,10 +224,6 @@
                 @endfor
             </div>
         </div>
-    @endif
-
-    @if ($vista === 'lista' && $totali)
-        <div class="card p-5"><p class="label">Totale ore previste ({{ $totali['etichetta'] }})</p><p class="text-2xl font-bold text-sky-600">{{ $totali['ore'] }}</p></div>
     @endif
 
     @if ($vista === 'lista')

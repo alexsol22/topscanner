@@ -5,6 +5,7 @@ namespace Tests\Feature\Livewire;
 use App\Livewire\SedeForm;
 use App\Livewire\Sedi;
 use App\Models\User;
+use App\Services\QrSede;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -130,13 +131,155 @@ class SediSuiteTest extends TestCase
         $this->assertSame('A', DB::table('tc_codici')->find($s['codiceSede'])->stato);
     }
 
-    public function test_list_shows_turni_counts(): void
+    public function test_list_shows_legacy_actions_without_technical_count_badges(): void
     {
         $c = $this->cliente();
         $s = $this->sedeCompleta($c);
+        DB::table('_provincia')->insert(['id' => 1, 'sigla' => 'MO']);
+        DB::table('_comuni')->insert(['id' => 1, 'comune' => 'Mirandola', 'sigla_provincia' => 'MO', 'id_provincia' => 1]);
+        DB::table('tc_sedi')->where('id', $s['sede'])->update([
+            'indirizzo' => 'Via Agnini,102',
+            'cap' => '41037',
+            'citta_id' => 1,
+            'provincia_id' => 1,
+        ]);
         DB::table('tc_turni')->insert([['id_sede' => $s['sede'], 'stato' => 'F'], ['id_sede' => $s['sede'], 'stato' => 'A'], ['id_sede' => $s['sede'], 'stato' => 'F']]);
 
-        Livewire::actingAs($this->admin())->test(Sedi::class)->assertSee('3 turni · 2 conclusi');
+        Livewire::actingAs($this->admin())->test(Sedi::class)->set('filtroCliente', $c)
+            ->assertSee('Visualizza agenda pos')
+            ->assertSee('href="'.route('turni', ['sede' => $s['sede']]).'"', false)
+            ->assertSee('Visualizza GDA')
+            ->assertSee('href="'.route('presenze', ['sede' => $s['sede']]).'"', false)
+            ->assertSee('Scarica QR')
+            ->assertSee('Modifica sede')
+            ->assertSee('Elimina sede')
+            ->assertDontSee('3 turni')
+            ->assertDontSee('postazioni</span>')
+            ->call('postazioni', $s['sede'])
+            ->assertSee('Qrcode Sede Uno')
+            ->assertSee('Postazione principale')
+            ->assertSee('VIA AGNINI,102 41037 MIRANDOLA (MO)')
+            ->assertSee('href="'.route('sedi.qrcode', $s['sede']).'"', false)
+            ->assertSee('href="'.route('postazioni.qrcode', $s['postazione']).'"', false)
+            ->assertDontSee('data:image/svg+xml')
+            ->assertDontSee('Nuova postazione')
+            ->assertDontSee('Ogni (min)')
+            ->assertDontSee('ogni ')
+            ->assertDontSee('Aggiungi postazione');
+    }
+
+    public function test_qr_downloads_serve_existing_files_and_enforce_customer_visibility(): void
+    {
+        $cliente = $this->cliente();
+        $altroCliente = $this->cliente('Altro');
+        $sede = $this->sedeCompleta($cliente);
+        $jpeg = "\xff\xd8\xff".'contenuto legacy'."\xff\xd9";
+        $percorsoSede = 'protected/documenti/QrcodeText/ITALPOL*S'.$sede['sede'].'.png';
+        $percorsoPostazione = 'protected/documenti/QrcodeText/ITALPOL*P'.$sede['postazione'].'.png';
+        Storage::disk($this->disco)->put($percorsoSede, $jpeg);
+        Storage::disk($this->disco)->put($percorsoPostazione, $jpeg);
+
+        $this->get(route('sedi.qrcode', $sede['sede']))->assertRedirect(route('login'));
+        $this->get(route('postazioni.qrcode', $sede['postazione']))->assertRedirect(route('login'));
+
+        foreach ([
+            ['sedi.qrcode', $sede['sede'], basename($percorsoSede)],
+            ['postazioni.qrcode', $sede['postazione'], basename($percorsoPostazione)],
+        ] as [$nome, $id, $filename]) {
+            $url = route($nome, $id);
+            $this->actingAs($this->utente(3, 901, $cliente))->get($url)
+                ->assertOk()->assertDownload($filename)->assertHeader('Content-Type', 'application/octet-stream')
+                ->assertStreamedContent($jpeg);
+            $this->actingAs($this->utente(3, 902, $altroCliente))->get($url)->assertForbidden();
+        }
+
+        Storage::disk($this->disco)->delete($percorsoSede);
+        Storage::disk($this->disco)->delete($percorsoPostazione);
+        $this->actingAs($this->admin())->get(route('sedi.qrcode', $sede['sede']))->assertNotFound();
+        $this->actingAs($this->admin())->get(route('postazioni.qrcode', $sede['postazione']))->assertNotFound();
+    }
+
+    public function test_generating_a_qr_does_not_replace_an_existing_file(): void
+    {
+        $qr = app(QrSede::class);
+        $percorso = $qr->percorso('ITALPOL*000123');
+        Storage::disk($this->disco)->put($percorso, 'immagine esistente');
+
+        try {
+            $qr->genera('ITALPOL*000123');
+            $this->fail('La generazione avrebbe dovuto segnalare il file esistente.');
+        } catch (\RuntimeException $e) {
+            $this->assertStringContainsString('esiste già', $e->getMessage());
+        }
+
+        $this->assertSame('immagine esistente', Storage::disk($this->disco)->get($percorso));
+    }
+
+    public function test_list_shows_only_sites_for_the_selected_customer(): void
+    {
+        $cliente = $this->cliente('Alpha');
+        $altroCliente = $this->cliente('Beta');
+        $this->sedeCompleta($cliente, 'Sede Alpha');
+        $this->sedeCompleta($altroCliente, 'Sede Beta');
+
+        Livewire::actingAs($this->admin())->test(Sedi::class)
+            ->assertSee('Seleziona un cliente')
+            ->assertDontSee('Sede Alpha')
+            ->assertDontSee('Sede Beta')
+            ->set('filtroCliente', $cliente)
+            ->assertSee('Alpha')
+            ->assertSee('Sede Alpha')
+            ->assertDontSee('Sede Beta')
+            ->assertDontSee('Tutti i clienti');
+    }
+
+    public function test_client_user_sees_only_its_sites_even_with_another_client_filter(): void
+    {
+        $cliente = $this->cliente('Alpha');
+        $altroCliente = $this->cliente('Beta');
+        $this->sedeCompleta($cliente, 'Sede Alpha');
+        $this->sedeCompleta($altroCliente, 'Sede Beta');
+
+        Livewire::actingAs($this->utente(3, 901, $cliente))->test(Sedi::class)
+            ->assertSee('Sede Alpha')
+            ->assertDontSee('Sede Beta')
+            ->set('filtroCliente', $altroCliente)
+            ->assertSee('Sede Alpha')
+            ->assertDontSee('Sede Beta');
+    }
+
+    public function test_list_filters_sites_by_denominazione_email_and_telefono(): void
+    {
+        $cliente = $this->cliente();
+        DB::table('tc_sedi')->insert([
+            ['id_cliente' => $cliente, 'descrizione' => 'Deposito Centrale', 'email' => 'centrale@example.test', 'telefono' => '051222111'],
+            ['id_cliente' => $cliente, 'descrizione' => 'Magazzino Nord', 'email' => 'nord@example.test', 'telefono' => '059333222'],
+        ]);
+        $lista = Livewire::actingAs($this->admin())->test(Sedi::class)->set('filtroCliente', $cliente);
+
+        $lista->set('filtroDenominazione', 'Centrale')
+            ->assertSee('Deposito Centrale')
+            ->assertDontSee('Magazzino Nord')
+            ->set('filtroDenominazione', '')
+            ->set('filtroEmail', 'nord@example')
+            ->assertSee('Magazzino Nord')
+            ->assertDontSee('Deposito Centrale')
+            ->set('filtroEmail', '')
+            ->set('filtroTelefono', '051222')
+            ->assertSee('Deposito Centrale')
+            ->assertDontSee('Magazzino Nord');
+    }
+
+    public function test_edit_displays_customer_and_site_in_the_legacy_breadcrumb(): void
+    {
+        $cliente = $this->cliente('AREA 1');
+        $sede = $this->sedeCompleta($cliente, 'GABBIOTTO SOPRA IL MARCATORE');
+
+        Livewire::actingAs($this->admin())->test(SedeForm::class, ['sede' => $sede['sede']])
+            ->assertSee('Sedi AREA 1')
+            ->assertSee('Modifica / Gestisci sede e postazioni - AREA 1 - GABBIOTTO SOPRA IL MARCATORE', false)
+            ->assertSee('value="'.$sede['codiceSede'].'" selected', false)
+            ->assertSee('value="'.$sede['codicePostazione'].'" selected', false);
     }
 
     public function test_export_csv_respects_filters_and_roles(): void
@@ -174,18 +317,196 @@ class SediSuiteTest extends TestCase
         $c = $this->cliente();
         $altro = $this->cliente('Beta');
         $s = $this->sedeCompleta($c);
+        $nuovoCodice = DB::table('tc_codici')->insertGetId(['codice' => 'ITALPOL*000123', 'stato' => 'C']);
         DB::table('_comuni')->insert(['id' => 1, 'comune' => 'Modena', 'sigla_provincia' => 'MO', 'id_provincia' => 1]);
 
         Livewire::actingAs($this->admin())->test(SedeForm::class, ['sede' => $s['sede']])
             ->set('f.cliente_id', $altro)
             ->set('f.descrizione', 'Rinominata')->set('f.indirizzo', 'Via Roma 1')->set('f.citta', 'Modena')->set('f.provincia', 'MO')
             ->set('f.lat', '44.5')->set('f.lng', '10.9')->set('f.distanza_max', 100)
+            ->set('codiceSedeId', (string) $nuovoCodice)
             ->call('salva')->assertHasNoErrors();
 
         $riga = DB::table('tc_sedi')->find($s['sede']);
         $this->assertSame($c, (int) $riga->id_cliente);
         $this->assertSame('Rinominata', $riga->descrizione);
+        $this->assertSame($nuovoCodice, (int) $riga->id_codice);
+        $this->assertSame('A', DB::table('tc_codici')->find($nuovoCodice)->stato);
+        $this->assertSame('S', DB::table('tc_codici')->find($nuovoCodice)->tipo);
         $this->assertSame(1, DB::table('_tracking')->where('action', 'Aggiornamento dati sede Rinominata')->count());
+    }
+
+    public function test_create_assigns_selected_available_qr_codes_to_site_and_station(): void
+    {
+        $cliente = $this->cliente();
+        $codiceSede = DB::table('tc_codici')->insertGetId(['codice' => 'ITALPOL*000201', 'stato' => 'C']);
+        $codicePostazione = DB::table('tc_codici')->insertGetId(['codice' => 'ITALPOL*000202', 'stato' => 'C']);
+        DB::table('_comuni')->insert(['id' => 1, 'comune' => 'Modena', 'sigla_provincia' => 'MO', 'id_provincia' => 1]);
+
+        $form = Livewire::actingAs($this->admin())->test(SedeForm::class)
+            ->assertSee('ITALPOL*000201')
+            ->set('codiceSedeId', (string) $codiceSede)
+            ->set('f.cliente_id', $cliente)->set('f.descrizione', 'Sede QR')->set('f.indirizzo', 'Via Roma 1')
+            ->set('f.citta', 'Modena')->set('f.provincia', 'MO')->set('f.lat', '44.5')->set('f.lng', '10.9');
+
+        $form->call('aggiungiPostazione');
+        $chiavePostazione = array_key_first($form->get('postazioni'));
+        $form->set("postazioni.$chiavePostazione.codice_id", (string) $codicePostazione)
+            ->set("postazioni.$chiavePostazione.titolo", 'Ingresso')
+            ->call('salva')->assertHasNoErrors();
+
+        $sede = DB::table('tc_sedi')->first();
+        $postazione = DB::table('tc_postazioni')->first();
+        $this->assertSame($codiceSede, (int) $sede->id_codice);
+        $this->assertSame($codicePostazione, (int) $postazione->id_codice);
+        $this->assertSame('A', DB::table('tc_codici')->find($codiceSede)->stato);
+        $this->assertSame('S', DB::table('tc_codici')->find($codiceSede)->tipo);
+        $this->assertSame((int) $sede->id, DB::table('tc_codici')->find($codiceSede)->id_sede);
+        $this->assertSame('A', DB::table('tc_codici')->find($codicePostazione)->stato);
+        $this->assertSame('P', DB::table('tc_codici')->find($codicePostazione)->tipo);
+        $this->assertSame((int) $postazione->id, DB::table('tc_codici')->find($codicePostazione)->id_postazione);
+    }
+
+    public function test_create_generates_qr_codes_when_none_are_available(): void
+    {
+        $cliente = $this->cliente();
+        DB::table('_comuni')->insert(['id' => 1, 'comune' => 'Modena', 'sigla_provincia' => 'MO', 'id_provincia' => 1]);
+
+        $form = Livewire::actingAs($this->admin())->test(SedeForm::class)
+            ->assertSee('CODICE DA GENERARE')
+            ->set('codiceSedeId', 'XX')
+            ->set('f.cliente_id', $cliente)->set('f.descrizione', 'Sede QR generati')->set('f.indirizzo', 'Via Roma 1')
+            ->set('f.citta', 'Modena')->set('f.provincia', 'MO')->set('f.lat', '44.5')->set('f.lng', '10.9');
+
+        $form->call('aggiungiPostazione');
+        $chiavePostazione = array_key_first($form->get('postazioni'));
+        $form->set("postazioni.$chiavePostazione.codice_id", 'XX')
+            ->set("postazioni.$chiavePostazione.titolo", 'Ingresso')
+            ->call('salva')->assertHasNoErrors();
+
+        $sede = DB::table('tc_sedi')->first();
+        $postazione = DB::table('tc_postazioni')->first();
+        $codiceSede = DB::table('tc_codici')->find($sede->id_codice);
+        $codicePostazione = DB::table('tc_codici')->find($postazione->id_codice);
+        $this->assertSame('A', $codiceSede->stato);
+        $this->assertSame('S', $codiceSede->tipo);
+        $this->assertSame((int) $sede->id, $codiceSede->id_sede);
+        $this->assertSame('A', $codicePostazione->stato);
+        $this->assertSame('P', $codicePostazione->tipo);
+        $this->assertSame((int) $postazione->id, $codicePostazione->id_postazione);
+        foreach ([$codiceSede, $codicePostazione] as $codice) {
+            $percorso = app(QrSede::class)->percorso($codice->codice);
+            Storage::disk($this->disco)->assertExists($percorso);
+            $this->assertSame('image/png', getimagesizefromstring(Storage::disk($this->disco)->get($percorso))['mime']);
+        }
+    }
+
+    public function test_qr_storage_failure_does_not_save_a_partial_site(): void
+    {
+        $cliente = $this->cliente();
+        DB::table('_comuni')->insert(['id' => 1, 'comune' => 'Modena', 'sigla_provincia' => 'MO', 'id_provincia' => 1]);
+        $qr = new QrSede;
+        $tentativi = 0;
+        $mock = \Mockery::mock(QrSede::class)->makePartial();
+        $mock->shouldReceive('genera')->twice()->andReturnUsing(function (string $codice) use ($qr, &$tentativi): void {
+            if (++$tentativi === 2) {
+                throw new \RuntimeException('Errore di scrittura QR');
+            }
+            $qr->genera($codice);
+        });
+        $this->app->instance(QrSede::class, $mock);
+
+        $form = Livewire::actingAs($this->admin())->test(SedeForm::class)
+            ->set('codiceSedeId', 'XX')
+            ->set('f.cliente_id', $cliente)->set('f.descrizione', 'Sede QR')->set('f.indirizzo', 'Via Roma 1')
+            ->set('f.citta', 'Modena')->set('f.provincia', 'MO')->set('f.lat', '44.5')->set('f.lng', '10.9')
+            ->call('aggiungiPostazione');
+        $chiave = array_key_first($form->get('postazioni'));
+
+        try {
+            $form->set("postazioni.$chiave.codice_id", 'XX')
+                ->set("postazioni.$chiave.titolo", 'Ingresso')
+                ->call('salva');
+            $this->fail("L'errore di scrittura avrebbe dovuto interrompere il salvataggio.");
+        } catch (\RuntimeException $e) {
+            $this->assertSame('Errore di scrittura QR', $e->getMessage());
+        }
+
+        $this->assertSame(0, DB::table('tc_sedi')->count());
+        $this->assertSame(0, DB::table('tc_postazioni')->count());
+        $this->assertSame(0, DB::table('tc_codici')->count());
+        $this->assertSame([], Storage::disk($this->disco)->files('protected/documenti/QrcodeText'));
+    }
+
+    public function test_edit_can_generate_new_qr_codes_when_none_are_available(): void
+    {
+        $cliente = $this->cliente();
+        $sede = $this->sedeCompleta($cliente);
+        DB::table('_comuni')->insert(['id' => 1, 'comune' => 'Modena', 'sigla_provincia' => 'MO', 'id_provincia' => 1]);
+        $chiavePostazione = 'p'.$sede['postazione'];
+
+        $form = Livewire::actingAs($this->admin())->test(SedeForm::class, ['sede' => $sede['sede']])
+            ->assertSee('CODICE DA GENERARE')
+            ->assertSee('ITALPOL*S'.$sede['sede'])
+            ->assertSee('ITALPOL*P'.$sede['postazione'])
+            ->set('codiceSedeId', 'XX')
+            ->set("postazioni.$chiavePostazione.codice_id", 'XX')
+            ->set('f.indirizzo', 'Via Roma 1')->set('f.citta', 'Modena')->set('f.provincia', 'MO')
+            ->set('f.lat', '44.5')->set('f.lng', '10.9')->set('f.distanza_max', 100);
+
+        $form->call('salva')->assertHasNoErrors();
+
+        $sedeAggiornata = DB::table('tc_sedi')->find($sede['sede']);
+        $postazioneAggiornata = DB::table('tc_postazioni')->find($sede['postazione']);
+        $codiceSede = DB::table('tc_codici')->find($sedeAggiornata->id_codice);
+        $codicePostazione = DB::table('tc_codici')->find($postazioneAggiornata->id_codice);
+        $this->assertNotSame($sede['codiceSede'], (int) $sedeAggiornata->id_codice);
+        $this->assertNotSame($sede['codicePostazione'], (int) $postazioneAggiornata->id_codice);
+        $this->assertSame('A', $codiceSede->stato);
+        $this->assertSame('S', $codiceSede->tipo);
+        $this->assertSame((int) $sede['sede'], $codiceSede->id_sede);
+        $this->assertSame('A', $codicePostazione->stato);
+        $this->assertSame('P', $codicePostazione->tipo);
+        $this->assertSame((int) $sede['sede'], $codicePostazione->id_sede);
+        $this->assertSame((int) $sede['postazione'], $codicePostazione->id_postazione);
+    }
+
+    public function test_create_rejects_assigning_the_same_qr_to_site_and_station(): void
+    {
+        $cliente = $this->cliente();
+        $codice = DB::table('tc_codici')->insertGetId(['codice' => 'ITALPOL*000203', 'stato' => 'C']);
+        DB::table('_comuni')->insert(['id' => 1, 'comune' => 'Modena', 'sigla_provincia' => 'MO', 'id_provincia' => 1]);
+
+        $form = Livewire::actingAs($this->admin())->test(SedeForm::class)
+            ->set('codiceSedeId', (string) $codice)
+            ->set('f.cliente_id', $cliente)->set('f.descrizione', 'Sede QR duplicato')->set('f.indirizzo', 'Via Roma 1')
+            ->set('f.citta', 'Modena')->set('f.provincia', 'MO')->set('f.lat', '44.5')->set('f.lng', '10.9');
+
+        $form->call('aggiungiPostazione');
+        $chiavePostazione = array_key_first($form->get('postazioni'));
+        $form->set("postazioni.$chiavePostazione.codice_id", (string) $codice)
+            ->set("postazioni.$chiavePostazione.titolo", 'Ingresso')
+            ->call('salva')
+            ->assertHasErrors(['codiceSedeId', "postazioni.$chiavePostazione.codice_id"]);
+
+        $this->assertSame(0, DB::table('tc_sedi')->count());
+        $this->assertSame('C', DB::table('tc_codici')->find($codice)->stato);
+    }
+
+    public function test_create_rejects_qr_code_assigned_to_another_site(): void
+    {
+        $cliente = $this->cliente();
+        $esistente = $this->sedeCompleta($cliente);
+        DB::table('_comuni')->insert(['id' => 1, 'comune' => 'Modena', 'sigla_provincia' => 'MO', 'id_provincia' => 1]);
+
+        Livewire::actingAs($this->admin())->test(SedeForm::class)
+            ->set('codiceSedeId', (string) $esistente['codiceSede'])
+            ->set('f.cliente_id', $cliente)->set('f.descrizione', 'Sede Non Valida')->set('f.indirizzo', 'Via Roma 1')
+            ->set('f.citta', 'Modena')->set('f.provincia', 'MO')->set('f.lat', '44.5')->set('f.lng', '10.9')
+            ->call('salva')->assertHasErrors(['codiceSedeId']);
+
+        $this->assertSame(1, DB::table('tc_sedi')->count());
+        $this->assertSame('A', DB::table('tc_codici')->find($esistente['codiceSede'])->stato);
     }
 
     public function test_save_without_coordinates_warns_but_keeps_old_behaviour(): void
@@ -194,11 +515,12 @@ class SediSuiteTest extends TestCase
         DB::table('_comuni')->insert(['id' => 1, 'comune' => 'Modena', 'sigla_provincia' => 'MO', 'id_provincia' => 1]);
 
         Livewire::actingAs($this->admin())->test(SedeForm::class)
-            ->set('f.cliente_id', $c)->set('f.descrizione', 'Nuova')->set('f.indirizzo', 'Via Roma 1')->set('f.citta', 'Modena')->set('f.provincia', 'MO')
+            ->set('codiceSedeId', 'XX')->set('f.cliente_id', $c)->set('f.descrizione', 'Nuova')->set('f.indirizzo', 'Via Roma 1')->set('f.citta', 'Modena')->set('f.provincia', 'MO')
             ->call('salva')->assertHasNoErrors();
 
         $this->assertSame(1, DB::table('tc_sedi')->count());
         $this->assertSame(0.0, (float) DB::table('tc_sedi')->value('lat'));
+        $this->assertSame(1, DB::table('tc_codici')->where('tipo', 'S')->where('stato', 'A')->count());
         $this->assertSame(1, DB::table('_tracking')->where('action', 'Creazione sede Nuova')->count());
         $this->assertStringContainsString('senza coordinate', (string) session('avviso'));
     }
@@ -211,7 +533,7 @@ class SediSuiteTest extends TestCase
         DB::table('_comuni')->insert(['id' => 1, 'comune' => 'Modena', 'sigla_provincia' => 'MO', 'id_provincia' => 1]);
 
         Livewire::actingAs($this->admin())->test(SedeForm::class)
-            ->set('f.cliente_id', $c)->set('f.descrizione', 'Nuova')->set('f.indirizzo', 'Via Roma 1')->set('f.cap', '41100')->set('f.citta', 'Modena')->set('f.provincia', 'MO')
+            ->set('codiceSedeId', 'XX')->set('f.cliente_id', $c)->set('f.descrizione', 'Nuova')->set('f.indirizzo', 'Via Roma 1')->set('f.cap', '41100')->set('f.citta', 'Modena')->set('f.provincia', 'MO')
             ->call('salva')->assertHasNoErrors();
 
         $this->assertSame(44.65, (float) DB::table('tc_sedi')->value('lat'));
@@ -293,6 +615,10 @@ class SediSuiteTest extends TestCase
             $table->unsignedInteger('id_tipo')->nullable();
             $table->string('tipo')->nullable();
             $table->string('file')->nullable();
+        });
+        Schema::create('_provincia', function (Blueprint $table): void {
+            $table->increments('id');
+            $table->string('sigla')->nullable();
         });
         Schema::create('_comuni', function (Blueprint $table): void {
             $table->increments('id');

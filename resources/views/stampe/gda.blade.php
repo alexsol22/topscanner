@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>GDA {{ $cliente->ragione_sociale }}</title>
+    <title>GDA {{ $cliente?->ragione_sociale ?? 'selezione corrente' }}</title>
     <style>
         @page { size: A4 landscape; margin: 7mm; }
         * { box-sizing: border-box; }
@@ -37,13 +37,15 @@
                 <p class="medio">{{ $azienda?->societa_cap }} {{ $azienda?->societa_comune }} ({{ $azienda?->societa_provincia }})</p>
                 <p class="medio">P.Iva: {{ $azienda?->societa_iva }}</p>
             </td>
-            <td class="destra">
-                <p class="grande">{{ $cliente->ragione_sociale }}</p>
-                <p class="medio">{{ $cliente->indirizzo }}</p>
-                <p class="medio">{{ $cliente->cap }} {{ $cliente->citta }} ({{ $cliente->provincia_sigla }})</p>
-                <p class="medio">P.Iva: {{ $cliente->piva }}</p>
-                <p class="medio">Tel: {{ $cliente->telefono }}</p>
-            </td>
+            @if ($cliente)
+                <td class="destra">
+                    <p class="grande">{{ $cliente->ragione_sociale }}</p>
+                    <p class="medio">{{ $cliente->indirizzo }}</p>
+                    <p class="medio">{{ $cliente->cap }} {{ $cliente->citta }} ({{ $cliente->provincia_sigla }})</p>
+                    <p class="medio">P.Iva: {{ $cliente->piva }}</p>
+                    <p class="medio">Tel: {{ $cliente->telefono }}</p>
+                </td>
+            @endif
         </tr>
     </table>
 
@@ -65,7 +67,10 @@
             @forelse ($turni as $turno)
                 <tr class="turno">
                     <td>{{ $turno['sede'] }} {{ $turno['data'] }}</td>
-                    <td colspan="6">{{ $turno['inizio']->operatore?->cognome }} {{ $turno['inizio']->operatore?->nome }}</td>
+                    <td colspan="6">
+                        @unless ($cliente){{ $turno['inizio']->cliente?->ragione_sociale }} · @endunless
+                        {{ $turno['inizio']->operatore?->codice }} ({{ $turno['inizio']->operatore?->cognome }} {{ $turno['inizio']->operatore?->nome }})
+                    </td>
                 </tr>
                 <tr class="principale">
                     <td>Postazione principale</td>

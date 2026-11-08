@@ -22,6 +22,8 @@ class Messaggi extends Component
 
     public string $canale = 'sms';
 
+    public bool $canaleFissato = false;
+
     public string $filtroOperatore = '';
 
     public string $filtroDal = '';
@@ -32,9 +34,16 @@ class Messaggi extends Component
 
     public ?string $emailVisualizzazione = null;
 
-    public function mount(): void
+    public function mount(?string $canale = null): void
     {
         abort_unless(auth()->user()->isStaff(), 403);
+
+        if ($canale !== null) {
+            abort_unless(in_array($canale, ['sms', 'email'], true), 404);
+
+            $this->canale = $canale;
+            $this->canaleFissato = true;
+        }
     }
 
     public function selezionaCanale(string $canale): void

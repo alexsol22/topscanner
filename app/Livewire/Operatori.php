@@ -19,27 +19,56 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
 use Livewire\Component;
 use Livewire\WithFileUploads;
-use Livewire\WithPagination;
 
 #[Layout('layouts::app')]
 #[Title('Operatori e utenti')]
 class Operatori extends Component
 {
-    use WithFileUploads, WithPagination;
+    use WithFileUploads;
+
+    private const UTENTI_PER_CARICAMENTO = 10;
 
     private const ICONE = ['png' => 'file-image', 'jpg' => 'file-image', 'jpeg' => 'file-image', 'pdf' => 'file-pdf', 'doc' => 'file-word', 'docx' => 'file-word', 'zip' => 'file-archive', 'xls' => 'file-excel', 'xlsx' => 'file-excel', 'mp4' => 'file-audio'];
 
     private const ESTENSIONI = 'pdf,jpg,jpeg,png,doc,docx,xls,xlsx,mp4,zip';
 
-    public string $cerca = '';
+    public string $filtroCodice = '';
+
+    public string $filtroNome = '';
+
+    public string $filtroCognome = '';
+
+    public string $filtroEmail = '';
+
+    public string $filtroCellulare = '';
+
+    #[Locked]
+    public int $utentiVisibili = self::UTENTI_PER_CARICAMENTO;
 
     public ?int $eliminaId = null;
 
     public string $conferma = '';
+
+    #[Locked]
+    public ?int $idCambioStato = null;
+
+    #[Locked]
+    public ?bool $statoRichiesto = null;
+
+    #[Locked]
+    public string $nomeCambioStato = '';
+
+    public bool $modalFormazioni = false;
+
+    public string $codiceOperatoreFormazioni = '';
+
+    /** @var array<int, array{id: int, data: string, descrizione: string, file: bool}> */
+    public array $documentiOperatore = [];
 
     #[Url(as: 'form')]
     public bool $editing = false;
@@ -79,9 +108,20 @@ class Operatori extends Component
         abort_unless(auth()->user()?->isStaff(), 403);
     }
 
-    public function updatingCerca(): void
+    public function updating(string $name): void
     {
-        $this->resetPage();
+        if (in_array($name, ['filtroCodice', 'filtroNome', 'filtroCognome', 'filtroEmail', 'filtroCellulare'], true)) {
+            $this->utentiVisibili = self::UTENTI_PER_CARICAMENTO;
+        }
+    }
+
+    public function caricaAltri(): void
+    {
+        if ($this->editing || ! $this->queryElencoOperatori()->offset($this->utentiVisibili)->limit(1)->exists()) {
+            return;
+        }
+
+        $this->utentiVisibili += self::UTENTI_PER_CARICAMENTO;
     }
 
     protected function rules(): array
@@ -148,6 +188,41 @@ class Operatori extends Component
         $this->apriForm();
         $this->caricaMateriali();
         $this->caricaFormazioni();
+    }
+
+    public function mostraFormazioni(int $id): void
+    {
+        $operatore = $this->query()->where('user_type', 4)->findOrFail($id);
+        $this->codiceOperatoreFormazioni = (string) $operatore->codice;
+        $this->documentiOperatore = Documento::where('tipo', 'O')
+            ->where('id_tipo', $operatore->id)
+            ->orderByDesc('id')
+            ->get(['id', 'inizio', 'fine', 'scadenza', 'descrizione', 'file'])
+            ->map(static function (Documento $documento): array {
+                $inizio = $documento->inizio?->format('d/m/Y');
+                $fine = $documento->fine?->format('d/m/Y');
+                $data = match (true) {
+                    $inizio !== null && $fine !== null => "Dal {$inizio} al {$fine}",
+                    $inizio !== null => "Il {$inizio}",
+                    $fine !== null => "Il {$fine}",
+                    $documento->scadenza !== null => 'Scade il '.$documento->scadenza->format('d/m/Y'),
+                    default => '—',
+                };
+
+                return [
+                    'id' => (int) $documento->id,
+                    'data' => $data,
+                    'descrizione' => (string) ($documento->descrizione ?? ''),
+                    'file' => (bool) $documento->file,
+                ];
+            })
+            ->all();
+        $this->modalFormazioni = true;
+    }
+
+    public function chiudiModalFormazioni(): void
+    {
+        $this->reset('modalFormazioni', 'codiceOperatoreFormazioni', 'documentiOperatore');
     }
 
     private function apriForm(): void
@@ -376,12 +451,62 @@ class Operatori extends Component
         return $this->query()->findOrFail($this->userId);
     }
 
-    public function attivaDisattiva(int $id): void
+    public function richiediCambioStato(int $id, bool $attivo): void
     {
         $u = $this->query()->findOrFail($id);
         abort_if($u->id === auth()->id(), 403);
-        $u->update(['attivo' => ! $u->attivo]);
+
+        if ($u->attivo === $attivo) {
+            return;
+        }
+
+        $this->idCambioStato = $u->id;
+        $this->statoRichiesto = $attivo;
+        $this->nomeCambioStato = $u->nome_completo;
+    }
+
+    public function annullaCambioStato(): void
+    {
+        $this->reset('idCambioStato', 'statoRichiesto', 'nomeCambioStato');
+    }
+
+    public function confermaCambioStato(): void
+    {
+        abort_unless($this->idCambioStato !== null && $this->statoRichiesto !== null, 404);
+
+        $u = $this->query()->findOrFail($this->idCambioStato);
+        abort_if($u->id === auth()->id(), 403);
+
+        if ($u->attivo === $this->statoRichiesto) {
+            $this->annullaCambioStato();
+
+            return;
+        }
+
+        $this->attivaDisattiva($u->id, $this->statoRichiesto);
+        $this->annullaCambioStato();
+    }
+
+    private function attivaDisattiva(int $id, bool $attivo): void
+    {
+        $u = $this->query()->findOrFail($id);
+
+        $u->update(['attivo' => $attivo]);
         Tracking::registra(($u->attivo ? 'Abilitazione ' : 'Disabilitazione ').' elenco utenti '.$u->user);
+
+        if (! $u->attivo) {
+            session()->flash('esito', "Account di {$u->nome_completo} disabilitato.");
+
+            return;
+        }
+
+        $password = Str::password(8, symbols: false);
+        $u->update(['password' => $password]);
+        $inviata = app(Comunicazioni::class)->inviaCredenziali($u->nome_completo, (string) $u->user, (string) $u->email, $password);
+
+        session()->flash('esito', $inviata
+            ? "Account di {$u->nome_completo} abilitato. Credenziali inviate a {$u->email}."
+            : "Account di {$u->nome_completo} abilitato, ma l'email con le credenziali non è stata inviata: usa «Password dimenticata?» dal login per generarne una nuova.");
     }
 
     public function richiediEliminazione(int $id): void
@@ -462,6 +587,16 @@ class Operatori extends Component
         return User::query()->where('id', '!=', 1)->when(auth()->user()->ruolo !== Ruolo::SuperAdmin, fn ($q) => $q->whereNotIn('user_type', [1, 2]));
     }
 
+    private function queryElencoOperatori()
+    {
+        return $this->query()
+            ->when($this->filtroCodice !== '', fn ($q) => $q->where('codice', 'like', "%{$this->filtroCodice}%"))
+            ->when($this->filtroNome !== '', fn ($q) => $q->where('nome', 'like', "%{$this->filtroNome}%"))
+            ->when($this->filtroCognome !== '', fn ($q) => $q->where('cognome', 'like', "%{$this->filtroCognome}%"))
+            ->when($this->filtroEmail !== '', fn ($q) => $q->where('email', 'like', "%{$this->filtroEmail}%"))
+            ->when($this->filtroCellulare !== '', fn ($q) => $q->where('cellulare', 'like', "%{$this->filtroCellulare}%"));
+    }
+
     public function render()
     {
         $daEliminare = $this->eliminaId ? $this->query()->find($this->eliminaId) : null;
@@ -471,14 +606,33 @@ class Operatori extends Component
             'turni' => $this->storicoTurni($daEliminare->id),
         ] : [];
 
-        $utenti = $this->query()->with('cliente')
-            ->when($this->cerca, fn ($q) => $q->where(fn ($w) => $w->where('nome', 'like', "%{$this->cerca}%")->orWhere('cognome', 'like', "%{$this->cerca}%")->orWhere('email', 'like', "%{$this->cerca}%")))
-            ->orderBy('cognome')->orderBy('nome')->paginate(10);
+        $utenti = $this->queryElencoOperatori()->with('cliente')
+            ->withCount([
+                'turni',
+                'turni as gda_count' => fn ($q) => $q->where('stato', 'F'),
+            ])
+            ->addSelect([
+                'documenti_count' => Documento::query()
+                    ->selectRaw('count(*)')
+                    ->where('tipo', 'O')
+                    ->whereColumn('id_tipo', 'tc_admin.id'),
+            ])
+            ->orderByRaw("CASE WHEN codice IS NULL OR codice = '' THEN 1 ELSE 0 END")
+            ->orderByRaw('CAST(codice AS SIGNED)')
+            ->orderBy('codice')
+            ->orderBy('id')
+            ->limit($this->utentiVisibili + 1)
+            ->get();
+        $hasMoreUsers = $utenti->count() > $this->utentiVisibili;
+        if ($hasMoreUsers) {
+            $utenti = $utenti->take($this->utentiVisibili);
+        }
 
         $conSezioni = $this->editing && $this->userId && ($this->f['ruolo'] ?? '') === 'operatore';
 
         return view('livewire.operatori', [
             'utenti' => $utenti,
+            'hasMoreUsers' => $hasMoreUsers,
             'daEliminare' => $daEliminare,
             'riepilogo' => $riepilogo,
             'province' => Provincia::orderBy('nome')->get(['id', 'nome', 'sigla']),

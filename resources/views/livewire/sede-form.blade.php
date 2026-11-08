@@ -7,7 +7,17 @@
     ];
 @endphp
 <div class="space-y-5" x-data="{ tab: 'dati' }" @tab-errore.window="tab = $event.detail.tab">
-    <a href="{{ route('sedi') }}" wire:navigate class="inline-flex items-center gap-1 text-sm font-medium text-sky-700 hover:underline">← Torna alle sedi</a>
+    <nav aria-label="Percorso" class="flex flex-wrap items-center gap-2 text-sm text-slate-500">
+        <a href="{{ url('/') }}" wire:navigate class="hover:text-sky-700 hover:underline">Home</a>
+        <span aria-hidden="true">»</span>
+        <a href="{{ route('sedi', ['cliente' => $f['cliente_id'] ?? null]) }}" wire:navigate class="font-medium text-sky-700 hover:underline">
+            Sedi{{ $nomeCliente ? ' '.$nomeCliente : '' }}
+        </a>
+        <span aria-hidden="true">»</span>
+        <span aria-current="page" class="font-medium text-slate-700">
+            {{ $sedeId ? 'Modifica / Gestisci sede e postazioni - '.$nomeCliente.' - '.$nomeSede : 'Nuova sede' }}
+        </span>
+    </nav>
 
     <div class="flex gap-1 overflow-x-auto rounded-2xl bg-white p-1.5 shadow-sm ring-1 ring-sky-100">
         @foreach ($tabs as $chiave => [$etichetta, $icona, $campi])
@@ -25,7 +35,16 @@
         <section x-show="tab === 'dati'" class="card p-5 sm:p-6">
             <h2 class="mb-4 text-base font-bold text-slate-800">Dati sede</h2>
             <div class="grid gap-4 sm:grid-cols-2">
-                <x-ui.field label="Qrcode associato" name="codice"><input value="{{ $codiceSede ?: 'Verrà generato al salvataggio' }}" class="input bg-slate-50 text-slate-500" readonly></x-ui.field>
+                <x-ui.field label="{{ $sedeId ? 'Qrcode associato' : 'Associa Qrcode' }}" name="codiceSedeId">
+                    <div wire:ignore x-on:change="$wire.set('codiceSedeId', $event.target.value)">
+                        <select class="input select2-qr">
+                            <option value="" @selected($codiceSedeId === '')>— Seleziona —</option>
+                            @foreach ($codiciSede as $id => $codice)
+                                <option value="{{ $id }}" @selected((string) $id === $codiceSedeId)>{{ $codice }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                </x-ui.field>
                 <x-ui.field label="Distanza massima scansione" name="f.distanza_max">
                     <div class="relative"><input type="number" wire:model.live.debounce.400ms="f.distanza_max" class="input !pr-10"><span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-slate-400">m</span></div>
                 </x-ui.field>
@@ -209,7 +228,16 @@
                             @endif
                         </div>
                         <div class="grid min-w-0 flex-1 gap-4 sm:grid-cols-2">
-                            <x-ui.field label="Qrcode associato" name="codice" class="sm:col-span-2"><input value="{{ $p['codice'] ?: 'Verrà generato al salvataggio' }}" class="input bg-slate-50 text-slate-500" readonly></x-ui.field>
+                            <x-ui.field label="Qrcode associato" name="postazioni.{{ $chiave }}.codice_id" class="sm:col-span-2">
+                                <div wire:ignore x-on:change="$wire.set('postazioni.{{ $chiave }}.codice_id', $event.target.value)">
+                                    <select class="input select2-qr">
+                                        <option value="" @selected($p['codice_id'] === '')>— Seleziona —</option>
+                                        @foreach ($codiciPostazioni[$chiave] ?? [] as $id => $codice)
+                                            <option value="{{ $id }}" @selected((string) $id === $p['codice_id'])>{{ $codice }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                            </x-ui.field>
                             <x-ui.field label="Titolo postazione *" name="postazioni.{{ $chiave }}.titolo" class="sm:col-span-2"><input wire:model="postazioni.{{ $chiave }}.titolo" class="input"></x-ui.field>
                             <x-ui.field label="Numero passaggi per turno" name="postazioni.{{ $chiave }}.passaggi"><input type="number" min="0" wire:model="postazioni.{{ $chiave }}.passaggi" class="input"></x-ui.field>
                             <x-ui.field label="Minuti di passaggio dopo inizio turno" name="postazioni.{{ $chiave }}.minuti"><input type="number" min="0" wire:model="postazioni.{{ $chiave }}.minuti" class="input"></x-ui.field>
@@ -228,7 +256,7 @@
         <div class="flex items-center justify-between gap-2">
             <p class="text-xs text-slate-500">I campi contrassegnati con * sono obbligatori.</p>
             <div class="flex gap-2">
-                <a href="{{ route('sedi') }}" wire:navigate class="btn-soft">Annulla</a>
+                <a href="{{ route('sedi', ['cliente' => $f['cliente_id'] ?? null]) }}" wire:navigate class="btn-soft">Annulla</a>
                 <button class="btn-primary" wire:loading.attr="disabled" wire:target="foto,immaginiPostazioni"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>{{ $sedeId ? 'Aggiorna' : 'Inserisci' }}</button>
             </div>
         </div>

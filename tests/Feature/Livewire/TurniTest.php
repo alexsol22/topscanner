@@ -74,6 +74,93 @@ class TurniTest extends TestCase
         });
     }
 
+    public function test_calendar_status_filter_can_be_selected_and_cleared(): void
+    {
+        DB::table('tc_admin')->insert([
+            'id' => 1, 'user_type' => 2, 'attivo' => 'Y', 'nome' => 'Admin', 'cognome' => 'Test',
+        ]);
+
+        $componente = Livewire::actingAs(User::findOrFail(1))->test(Turni::class);
+
+        $componente
+            ->assertSee('wire:click="$set(\'filtroStato\', \'completato\')"', false)
+            ->set('filtroStato', 'completato')
+            ->assertSet('filtroStato', 'completato')
+            ->assertSee('wire:click="$set(\'filtroStato\', \'\')"', false)
+            ->assertSee('aria-label="Azzera filtro stato"', false)
+            ->set('filtroStato', '')
+            ->assertSet('filtroStato', '')
+            ->assertSee('wire:click="$set(\'filtroStato\', \'completato\')"', false);
+    }
+
+    public function test_agenda_page_has_a_single_reactive_title(): void
+    {
+        DB::table('tc_admin')->insert([
+            'id' => 1, 'user_type' => 2, 'attivo' => 'Y', 'nome' => 'Admin', 'cognome' => 'Test',
+        ]);
+
+        $response = $this->actingAs(User::findOrFail(1))->get(route('turni'));
+
+        $response->assertOk()->assertSee('Agenda Pos');
+        $this->assertSame(1, substr_count($response->getContent(), '<h1 '));
+    }
+
+    public function test_agenda_title_and_total_follow_selected_filters_and_list_dates(): void
+    {
+        $this->travelTo(now()->setDate(2026, 11, 7)->setTime(12, 0));
+        DB::table('tc_admin')->insert([
+            ['id' => 1, 'user_type' => 2, 'attivo' => 'Y', 'nome' => 'Admin', 'cognome' => 'Test'],
+            ['id' => 2, 'user_type' => 4, 'attivo' => 'Y', 'nome' => 'Mario', 'cognome' => 'Rossi'],
+            ['id' => 3, 'user_type' => 4, 'attivo' => 'Y', 'nome' => 'Anna', 'cognome' => 'Verdi'],
+        ]);
+        DB::table('tc_clienti')->insert([
+            ['id' => 1, 'ragione_sociale' => 'AREA 1', 'isTest' => 0],
+            ['id' => 2, 'ragione_sociale' => 'AREA 2', 'isTest' => 0],
+        ]);
+        DB::table('tc_sedi')->insert([
+            ['id' => 1, 'id_cliente' => 1, 'descrizione' => 'Sede Nord'],
+            ['id' => 2, 'id_cliente' => 1, 'descrizione' => 'Sede Sud'],
+            ['id' => 3, 'id_cliente' => 2, 'descrizione' => 'Sede Altra'],
+        ]);
+        DB::table('tc_turni')->insert([
+            ['id_cliente' => 1, 'id_sede' => 1, 'id_operatore' => 2, 'data_inizio' => '2026-11-07', 'data_fine' => '2026-11-07', 'ora_inizio' => '08:00', 'ora_fine' => '16:00', 'ore' => 8.25, 'stato' => 'F'],
+            ['id_cliente' => 1, 'id_sede' => 1, 'id_operatore' => 2, 'data_inizio' => '2026-10-01', 'data_fine' => '2026-10-01', 'ora_inizio' => '08:00', 'ora_fine' => '16:00', 'ore' => 4, 'stato' => 'F'],
+            ['id_cliente' => 1, 'id_sede' => 1, 'id_operatore' => 2, 'data_inizio' => '2026-11-07', 'data_fine' => '2026-11-07', 'ora_inizio' => '08:00', 'ora_fine' => '16:00', 'ore' => 1.5, 'stato' => 'I'],
+            ['id_cliente' => 1, 'id_sede' => 1, 'id_operatore' => 3, 'data_inizio' => '2026-11-07', 'data_fine' => '2026-11-07', 'ora_inizio' => '08:00', 'ora_fine' => '16:00', 'ore' => 2, 'stato' => 'I'],
+            ['id_cliente' => 1, 'id_sede' => 2, 'id_operatore' => 2, 'data_inizio' => '2026-11-07', 'data_fine' => '2026-11-07', 'ora_inizio' => '08:00', 'ora_fine' => '16:00', 'ore' => 3, 'stato' => 'F'],
+            ['id_cliente' => 2, 'id_sede' => 3, 'id_operatore' => 2, 'data_inizio' => '2026-11-07', 'data_fine' => '2026-11-07', 'ora_inizio' => '08:00', 'ora_fine' => '16:00', 'ore' => 20, 'stato' => 'F'],
+        ]);
+
+        $componente = Livewire::actingAs(User::findOrFail(1))->test(Turni::class)
+            ->assertSee('Agenda Pos')
+            ->assertDontSee('Totale ore:')
+            ->set('filtroCliente', 1)
+            ->assertSee('AREA 1')
+            ->assertSee('18.75')
+            ->assertSee('(tutti i periodi)')
+            ->set('filtroSede', 1)
+            ->assertSee('Sede Nord')
+            ->assertSee('15.75')
+            ->set('filtroOperatore', 2)
+            ->assertSee('Mario Rossi')
+            ->assertSee('13.75')
+            ->set('filtroStato', 'completato')
+            ->assertSee('12.25')
+            ->set('vista', 'lista')
+            ->set('da', '2026-11-07')
+            ->set('a', '2026-11-07')
+            ->assertSee('8.25')
+            ->assertSee('(intervallo selezionato)');
+
+        $componente->set('filtroCliente', null)
+            ->set('filtroSede', null)
+            ->set('filtroOperatore', null)
+            ->set('filtroStato', '')
+            ->set('da', '')
+            ->set('a', '')
+            ->assertDontSee('Totale ore:');
+    }
+
     public function test_turno_shows_progress_for_registered_start_and_end(): void
     {
         DB::table('tc_admin')->insert([

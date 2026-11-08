@@ -1,50 +1,47 @@
 <div class="space-y-5">
-    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <fieldset class="flex flex-wrap gap-2">
-            <legend class="sr-only">Canale messaggi</legend>
-            @foreach (['sms' => 'SMS', 'email' => 'Email'] as $valore => $etichetta)
-                <button
-                    type="button"
-                    wire:click="selezionaCanale('{{ $valore }}')"
-                    aria-pressed="{{ $canale === $valore ? 'true' : 'false' }}"
-                    @class(['btn-primary' => $canale === $valore, 'btn-soft' => $canale !== $valore])
-                >{{ $etichetta }}</button>
-            @endforeach
-            <button type="button" disabled aria-disabled="true" class="btn-soft cursor-not-allowed opacity-50">
-                WhatsApp <span class="text-xs font-normal">(in arrivo)</span>
-            </button>
-        </fieldset>
-    </div>
+    @if ($canaleFissato)
+        <h2 class="text-lg font-semibold text-slate-800">{{ $canale === 'sms' ? 'SMS inviati' : 'Email inviate' }}</h2>
+    @else
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <fieldset class="flex flex-wrap gap-2">
+                <legend class="sr-only">Canale messaggi</legend>
+                @foreach (['sms' => 'SMS', 'email' => 'Email'] as $valore => $etichetta)
+                    <button
+                        type="button"
+                        wire:click="selezionaCanale('{{ $valore }}')"
+                        aria-pressed="{{ $canale === $valore ? 'true' : 'false' }}"
+                        @class(['btn-primary' => $canale === $valore, 'btn-soft' => $canale !== $valore])
+                    >{{ $etichetta }}</button>
+                @endforeach
+                <button type="button" disabled aria-disabled="true" class="btn-soft cursor-not-allowed opacity-50">
+                    WhatsApp <span class="text-xs font-normal">(in arrivo)</span>
+                </button>
+            </fieldset>
+        </div>
+    @endif
 
     @if (in_array($canale, ['sms', 'email'], true))
-            <section aria-label="Filtri invii" class="card grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-4">
+            <x-ui.filtri title="Filtri invii" :values="['filtroOperatore' => $filtroOperatore, 'filtroDal' => $filtroDal, 'filtroAl' => $filtroAl]">
+              <section aria-label="Filtri invii" class="grid gap-3 sm:grid-cols-2">
                 <x-ui.select-search
                     label="Operatore"
                     model="filtroOperatore"
-                    :live="true"
+                    :draft="true"
                     placeholder="Tutti gli operatori"
                     :options="$operatori->map(fn ($o) => ['id' => (string) $o->id, 'nome' => $o->nome_completo])->values()"
                 />
                 <div>
                     <label for="filtro-dal" class="label">Dal</label>
-                    <input id="filtro-dal" type="datetime-local" wire:model.live="filtroDal" class="input">
+                    <input id="filtro-dal" type="datetime-local" x-model="valori.filtroDal" :max="valori.filtroAl || null" class="input">
                     @error('filtroDal') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
                 </div>
                 <div>
                     <label for="filtro-al" class="label">Al</label>
-                    <input id="filtro-al" type="datetime-local" wire:model.live="filtroAl" class="input">
+                    <input id="filtro-al" type="datetime-local" x-model="valori.filtroAl" :min="valori.filtroDal || null" class="input">
                     @error('filtroAl') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
                 </div>
-                @if ($filtroOperatore !== '' || $filtroDal !== '' || $filtroAl !== '')
-                    <div class="flex items-end">
-                        <button
-                            type="button"
-                            wire:click="azzeraFiltri"
-                            class="btn-soft"
-                        >Azzera filtri</button>
-                    </div>
-                @endif
             </section>
+            </x-ui.filtri>
     @endif
 
     @if ($canale === 'sms')

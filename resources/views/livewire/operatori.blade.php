@@ -3,6 +3,43 @@
         <div class="rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 ring-1 ring-emerald-100">{{ session('esito') }}</div>
     @endif
 
+    @if ($idCambioStato !== null && $statoRichiesto !== null)
+        <x-ui.modal :title="$statoRichiesto ? 'Riabilitare account' : 'Disabilitare account'" close="annullaCambioStato">
+            <div class="flex items-start gap-4">
+                <div @class([
+                    'flex size-12 shrink-0 items-center justify-center rounded-full',
+                    'bg-emerald-100 text-emerald-600' => $statoRichiesto,
+                    'bg-amber-100 text-amber-600' => ! $statoRichiesto,
+                ])>
+                    <svg class="size-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                        @if ($statoRichiesto)
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M5 12l4 4L19 6"/>
+                        @else
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M10.3 3.9 1.8 18.6A1.6 1.6 0 003.2 21h17.6a1.6 1.6 0 001.4-2.4L13.7 3.9a2 2 0 00-3.4 0z"/>
+                        @endif
+                    </svg>
+                </div>
+                <div class="space-y-2 text-sm text-slate-600">
+                    <p>
+                        {{ $statoRichiesto ? 'Vuoi riabilitare' : 'Vuoi disabilitare' }}
+                        l’account di <strong class="text-slate-800">{{ $nomeCambioStato }}</strong>?
+                    </p>
+                    @if ($statoRichiesto)
+                        <p>Verrà generata una nuova password temporanea e inviata all’operatore via email.</p>
+                    @else
+                        <p>L’operatore non potrà più accedere finché l’account non verrà riabilitato.</p>
+                    @endif
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end gap-2">
+                <button type="button" wire:click="annullaCambioStato" class="btn-soft">Annulla</button>
+                <button type="button" wire:click="confermaCambioStato" wire:loading.attr="disabled" class="{{ $statoRichiesto ? 'btn-primary' : 'btn-danger' }}">
+                    {{ $statoRichiesto ? 'Sì, riabilita' : 'Sì, disabilita' }}
+                </button>
+            </div>
+        </x-ui.modal>
+    @endif
+
     @if ($daEliminare)
         <x-ui.conferma-eliminazione :title="'Eliminare '.$daEliminare->nome_completo.'?'" atteso="conferma">
             @if ($riepilogo['turni'] > 0)
@@ -20,37 +57,158 @@
         </x-ui.conferma-eliminazione>
     @endif
 
-    @if (! $editing)
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div class="flex flex-1 gap-2">
-                <input type="search" wire:model.live.debounce.300ms="cerca" placeholder="Cerca per nome o email…" class="input sm:max-w-xs">
+    @if ($modalFormazioni)
+        <x-ui.modal :title="'Formazioni / Attestati — '.$codiceOperatoreFormazioni" wide="xl" close="chiudiModalFormazioni">
+            <div class="overflow-x-auto rounded-2xl ring-1 ring-sky-100">
+                <table class="w-full min-w-[36rem] text-left text-sm">
+                    <thead class="bg-sky-50 text-xs font-semibold uppercase text-slate-500">
+                        <tr>
+                            <th class="px-3 py-2">Data / Scadenza</th>
+                            <th class="px-3 py-2">Formazione / Certificato - Attestato</th>
+                            <th class="px-3 py-2 text-center">Scarica</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-sky-100">
+                        @forelse ($documentiOperatore as $documento)
+                            <tr wire:key="documento-operatore-{{ $documento['id'] }}">
+                                <td class="whitespace-nowrap px-3 py-3">{{ $documento['data'] }}</td>
+                                <td class="px-3 py-3">{{ $documento['descrizione'] ?: '—' }}</td>
+                                <td class="px-3 py-3 text-center">
+                                    @if ($documento['file'])
+                                        <a href="{{ route('documenti.scarica', $documento['id'], false) }}" class="btn-soft !px-3 !py-1">Scarica</a>
+                                    @else
+                                        <span class="text-slate-400">—</span>
+                                    @endif
+                                </td>
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="3" class="px-4 py-6 text-center text-slate-500">Nessuna formazione o attestato.</td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
             </div>
-            <button wire:click="nuovo" class="btn-primary">+ Nuovo utente</button>
+            <div class="mt-4 flex justify-end">
+                <button type="button" wire:click="chiudiModalFormazioni" class="btn-soft">Chiudi</button>
+            </div>
+        </x-ui.modal>
+    @endif
+
+    @if (! $editing)
+        <div class="card overflow-hidden">
+            <div class="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                <h2 class="text-lg font-bold text-slate-800">Elenco operatori</h2>
+                <div class="flex items-center justify-end gap-2">
+                    <x-ui.filtri title="Ricerca operatore" trigger-label="Ricerca operatore" :values="['filtroCodice' => $filtroCodice, 'filtroNome' => $filtroNome, 'filtroCognome' => $filtroCognome, 'filtroEmail' => $filtroEmail, 'filtroCellulare' => $filtroCellulare]">
+                        <x-slot:trigger>
+                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path stroke-linecap="round" d="m20 20-4-4"/></svg>
+                        </x-slot:trigger>
+                        <div class="grid gap-3 sm:grid-cols-2">
+                            <div>
+                                <label for="filtro-codice-operatore" class="label">Codice</label>
+                                <input id="filtro-codice-operatore" type="search" x-model="valori.filtroCodice" class="input">
+                            </div>
+                            <div>
+                                <label for="filtro-nome-operatore" class="label">Nome</label>
+                                <input id="filtro-nome-operatore" type="search" x-model="valori.filtroNome" class="input">
+                            </div>
+                            <div>
+                                <label for="filtro-cognome-operatore" class="label">Cognome</label>
+                                <input id="filtro-cognome-operatore" type="search" x-model="valori.filtroCognome" class="input">
+                            </div>
+                            <div>
+                                <label for="filtro-email-operatore" class="label">Email</label>
+                                <input id="filtro-email-operatore" type="search" x-model="valori.filtroEmail" class="input">
+                            </div>
+                            <div>
+                                <label for="filtro-cellulare-operatore" class="label">Cellulare</label>
+                                <input id="filtro-cellulare-operatore" type="search" inputmode="tel" x-model="valori.filtroCellulare" class="input">
+                            </div>
+                        </div>
+                    </x-ui.filtri>
+                    <button type="button" wire:click="nuovo" title="Aggiungi operatore" aria-label="Aggiungi operatore" class="btn-primary !p-2">
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14m-7-7h14"/></svg>
+                    </button>
+                </div>
+            </div>
         </div>
 
-        <div class="card overflow-hidden"><div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-sky-100">
-                <thead class="bg-sky-50/60"><tr><th class="th">Nome</th><th class="th">Ruolo</th><th class="th">Contatti</th><th class="th">Stato</th><th class="th"></th></tr></thead>
-                <tbody class="divide-y divide-sky-50">
-                    @foreach ($utenti as $u)
-                        <tr wire:key="u{{ $u->id }}" class="hover:bg-sky-50/40">
-                            <td class="td"><p class="font-semibold text-slate-800">{{ $u->nome_completo }}</p><p class="text-xs text-slate-500">{{ $u->codice }}</p></td>
-                            <td class="td">{{ $u->ruolo->label() }}<p class="text-xs text-slate-500">{{ $u->cliente?->ragione_sociale }}</p></td>
-                            <td class="td"><p>{{ $u->email }}</p><p class="text-xs text-slate-500">{{ $u->cellulare }}</p></td>
-                            <td class="td"><span class="rounded-full px-2.5 py-1 text-xs font-semibold {{ $u->attivo ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500' }}">{{ $u->attivo ? 'Attivo' : 'Disattivo' }}</span></td>
-                            <td class="td whitespace-nowrap text-right">
-                                <button wire:click="modifica({{ $u->id }})" class="btn-soft !px-3 !py-1.5">Modifica</button>
+        @if ($utenti->isNotEmpty())
+            <div class="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+                @foreach ($utenti as $u)
+                    @php($isOperatore = (int) $u->user_type === 4)
+                    <article wire:key="u{{ $u->id }}" class="card flex flex-col items-center px-5 pt-5 text-center">
+                        <x-ui.avatar :user="$u" class="h-36 w-36 border-4 border-white shadow-sm ring-1 ring-sky-100" />
+                        <div class="flex flex-1 flex-col items-center pt-3">
+                            @if ($isOperatore)
+                                <h3 class="text-lg font-bold text-slate-800">
+                                    <span class="block text-sky-700">{{ $u->codice }}</span>
+                                    <span>{{ $u->cognome }} <small class="font-normal text-slate-500">{{ $u->nome }}</small></span>
+                                </h3>
+                            @else
+                                <h3 class="text-lg font-bold text-slate-800">{{ $u->nome_completo }}</h3>
+                                <p class="text-xs text-slate-500">{{ $u->ruolo->label() }}{{ $u->cliente ? ' — '.$u->cliente->ragione_sociale : '' }}</p>
+                            @endif
+                            <p class="mt-4 flex items-center justify-center gap-2 break-all text-sm text-slate-600">
+                                <svg class="h-4 w-4 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3 8l9 6 9-6M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                                {{ $u->email }}
+                            </p>
+                            <p class="mt-2 flex items-center justify-center gap-2 text-sm text-slate-600">
+                                <svg class="h-4 w-4 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h3l2 5-2 1a11 11 0 005 5l1-2 5 2v3a2 2 0 01-2 2A14 14 0 013 5z"/></svg>
+                                {{ $u->cellulare ?: '—' }}
+                            </p>
+                        </div>
+                        <div class="mt-5 flex flex-wrap items-center justify-center gap-2 border-t border-sky-50 py-4">
+                            @if ($isOperatore && $u->documenti_count > 0)
+                                <button type="button" wire:click="mostraFormazioni({{ $u->id }})" title="Visualizza formazioni" aria-label="Visualizza formazioni di {{ $u->nome_completo }}" class="btn-soft !p-2">
+                                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 14l9-5-9-5-9 5 9 5z"/><path stroke-linecap="round" stroke-linejoin="round" d="M5 12v5c4.5 3.5 9.5 3.5 14 0v-5m3-3v6"/></svg>
+                                </button>
+                            @endif
+                            @if ($isOperatore && $u->turni_count > 0)
+                                <a href="{{ route('turni', ['operatore' => $u->id]) }}" wire:navigate title="Visualizza agenda" aria-label="Visualizza agenda di {{ $u->nome_completo }}" class="btn-soft !p-2">
+                                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2"/><path stroke-linecap="round" d="M16 2v4M8 2v4M3 10h18"/></svg>
+                                </a>
+                            @endif
+                            @if ($isOperatore && $u->gda_count > 0)
+                                <a href="{{ route('presenze', ['operatore' => $u->id]) }}" wire:navigate title="Visualizza GDA" aria-label="Visualizza GDA di {{ $u->nome_completo }}" class="btn-soft !p-2">
+                                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+                                </a>
+                            @endif
+                            @if (auth()->user()->isStaff())
+                                <button type="button" wire:click="modifica({{ $u->id }})" title="Modifica operatore" aria-label="Modifica {{ $u->nome_completo }}" class="btn-soft !p-2">
+                                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l2.651 2.651M5 19l4.25-.85L19.513 7.887a1.875 1.875 0 00-2.65-2.65L6.6 15.5 5 19z"/></svg>
+                                </button>
                                 @if ($u->id !== auth()->id())
-                                    <button wire:click="attivaDisattiva({{ $u->id }})" class="btn-soft !px-3 !py-1.5">{{ $u->attivo ? 'Disattiva' : 'Attiva' }}</button>
-                                    <button wire:click="richiediEliminazione({{ $u->id }})" class="btn-danger !px-3 !py-1.5">Elimina</button>
+                                    <button type="button" wire:click="richiediEliminazione({{ $u->id }})" title="Elimina operatore" aria-label="Elimina {{ $u->nome_completo }}" class="btn-danger !p-2">
+                                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 7h12m-10 0V5h8v2m-9 0l1 13h8l1-13M10 11v5m4-5v5"/></svg>
+                                    </button>
+                                    <button type="button" wire:click="richiediCambioStato({{ $u->id }}, {{ $u->attivo ? 'false' : 'true' }})" title="{{ $u->attivo ? 'Disattiva account' : 'Attiva account' }}" aria-label="{{ $u->attivo ? 'Disattiva' : 'Attiva' }} {{ $u->nome_completo }}" class="rounded-xl p-2 text-white transition {{ $u->attivo ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-rose-500 hover:bg-rose-600' }}">
+                                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="{{ $u->attivo ? 'M5 12l4 4L19 6' : 'M6 6l12 12M18 6L6 18' }}"/></svg>
+                                    </button>
                                 @endif
-                            </td>
-                        </tr>
-                    @endforeach
-                </tbody>
-            </table>
-        </div></div>
-        {{ $utenti->links() }}
+                            @endif
+                        </div>
+                    </article>
+                @endforeach
+            </div>
+            @if ($hasMoreUsers)
+                <div wire:intersect="caricaAltri" class="flex min-h-12 items-center justify-center py-4 text-sm text-slate-500" role="status">
+                    <span wire:loading.remove wire:target="caricaAltri">Scorri per caricare altri operatori</span>
+                    <span wire:loading wire:target="caricaAltri" class="inline-flex items-center gap-2">
+                        <svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                        </svg>
+                        Caricamento...
+                    </span>
+                </div>
+            @endif
+        @else
+            <div class="rounded-xl border-l-4 border-cyan-500 bg-cyan-50 px-4 py-3 text-sm italic text-slate-600" role="status">
+                Non sono stati trovati operatori che soddisfino i parametri di ricerca inseriti.
+            </div>
+        @endif
     @endif
 
     @if ($editing)

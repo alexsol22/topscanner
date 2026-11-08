@@ -1,4 +1,4 @@
-@props(['label', 'model', 'options', 'tone' => 'sky'])
+@props(['label', 'model', 'options'])
 
 <div
     wire:ignore.self
@@ -16,31 +16,25 @@
         remove(id) { this.selected = this.selected.filter(i => i !== id); },
     }"
     @click.outside="open = false"
-    class="relative rounded-2xl p-4 ring-1 ring-sky-100"
+    class="relative w-full"
 >
-    <div class="mb-3 flex items-center justify-between">
-        <p class="label !mb-0">{{ $label }}</p>
-        <span class="rounded-full px-2.5 py-0.5 text-xs font-bold {{ $tone === 'rose' ? 'bg-rose-100 text-rose-700' : 'bg-sky-100 text-sky-700' }}" x-text="selected.length"></span>
+    <label class="label">{{ $label }}</label>
+    <div @click="$refs.cerca.focus(); open = true" class="flex min-h-11 w-full flex-wrap items-center gap-1.5 rounded-xl border border-sky-200 bg-white px-3 py-1.5 focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-100">
+        <template x-for="o in chosen" :key="o.id">
+            <span class="inline-flex items-center gap-1 rounded-md bg-sky-100 px-2 py-1 text-sm text-sky-800">
+                <span x-text="o.nome"></span>
+                <button type="button" @click.stop="remove(o.id)" class="flex size-5 items-center justify-center rounded text-sky-700 hover:bg-sky-200" aria-label="Rimuovi operatore selezionato">×</button>
+            </span>
+        </template>
+        <input x-ref="cerca" type="search" x-model="q" @focus="open = true" @input="open = true" @keydown.escape.stop="open = false" placeholder="Scegli operatori…" aria-label="{{ $label }}" class="min-w-40 flex-1 border-0 bg-transparent px-1 py-1 text-sm text-slate-700 outline-none focus:ring-0">
     </div>
 
-    <input type="search" x-model="q" @focus="open = true" @input="open = true" placeholder="Cerca operatore da aggiungere…" class="input">
-
-    <div x-show="open" x-cloak class="absolute inset-x-4 z-20 mt-1 max-h-56 overflow-y-auto rounded-2xl bg-white p-1 shadow-xl ring-1 ring-sky-100">
+    <div x-show="open" x-cloak class="absolute inset-x-0 z-20 mt-1 max-h-56 overflow-y-auto rounded-xl bg-white p-1 shadow-xl ring-1 ring-sky-100">
         <template x-for="o in found" :key="o.id">
-            <button type="button" @click="add(o.id)" class="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm hover:bg-sky-50">
-                <span x-text="o.nome"></span><span class="text-sky-500">+</span>
+            <button type="button" @click="add(o.id)" class="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-sky-50">
+                <span x-text="o.nome"></span>
             </button>
         </template>
         <p x-show="found.length === 0" class="px-3 py-3 text-center text-sm text-slate-400">Nessun operatore trovato.</p>
-    </div>
-
-    <div class="mt-3 flex min-h-12 flex-wrap gap-2">
-        <template x-for="o in chosen" :key="o.id">
-            <span class="inline-flex items-center gap-1.5 rounded-full py-1 pl-3 pr-1.5 text-sm font-medium {{ $tone === 'rose' ? 'bg-rose-50 text-rose-800 ring-1 ring-rose-200' : 'bg-sky-50 text-sky-800 ring-1 ring-sky-200' }}">
-                <span x-text="o.nome"></span>
-                <button type="button" @click="remove(o.id)" class="flex size-5 items-center justify-center rounded-full bg-white/70 text-xs hover:bg-white" aria-label="Rimuovi">✕</button>
-            </span>
-        </template>
-        <p x-show="chosen.length === 0" class="text-sm text-slate-400">Nessun operatore selezionato.</p>
     </div>
 </div>

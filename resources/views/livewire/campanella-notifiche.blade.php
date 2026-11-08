@@ -7,7 +7,7 @@
         @endif
     </button>
 
-    <div x-cloak x-show="aperta" x-transition.opacity class="absolute right-0 top-full z-50 mt-2 w-[28rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl bg-white shadow-xl ring-1 ring-sky-100">
+    <div x-cloak x-show="aperta" x-transition.opacity class="fixed inset-x-4 top-16 z-50 mt-2 overflow-hidden rounded-2xl bg-white shadow-xl ring-1 ring-sky-100 sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:w-[28rem] sm:max-w-[calc(100vw-2rem)]">
         <div class="flex items-center justify-between border-b border-sky-50 px-4 py-3">
             <p class="text-sm font-semibold text-slate-800">Notifiche</p>
             @if ($avvisi->isNotEmpty())

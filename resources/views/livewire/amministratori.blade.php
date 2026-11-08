@@ -1,6 +1,9 @@
 <div class="space-y-5">
     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <input type="search" wire:model.live.debounce.300ms="cerca" placeholder="Cerca per nome o email…" class="input sm:max-w-xs">
+        <x-ui.filtri :values="['cerca' => $cerca]">
+            <label for="cerca-amministratori" class="label">Nome o email</label>
+            <input id="cerca-amministratori" type="search" x-model="valori.cerca" placeholder="Cerca per nome o email…" class="input">
+        </x-ui.filtri>
         <button wire:click="nuovo" class="btn-primary">+ Nuovo amministratore</button>
     </div>
 

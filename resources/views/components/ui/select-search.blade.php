@@ -1,10 +1,15 @@
-@props(['model', 'options', 'placeholder' => 'Seleziona…', 'live' => false, 'label' => null])
+@props(['model', 'options', 'placeholder' => 'Seleziona…', 'live' => false, 'label' => null, 'draft' => false])
 
 @php($id = 'select-search-'.str_replace('.', '-', $model))
 
 <div
     x-data="{
+        @if ($draft)
+        get value() { return this.valori['{{ $model }}']; },
+        set value(value) { this.valori['{{ $model }}'] = value; },
+        @else
         value: $wire.$entangle('{{ $model }}'){{ $live ? '.live' : '' }},
+        @endif
         options: @js($options),
         q: '',
         open: false,
@@ -16,7 +21,7 @@
         pick(id) { this.value = id; this.open = false; this.q = ''; },
     }"
     @click.outside="open = false"
-    @keydown.escape="open = false"
+    @keydown.escape="if (open) { $event.stopPropagation(); open = false; }"
     {{ $attributes->class("relative") }}
 >
     @if ($label)

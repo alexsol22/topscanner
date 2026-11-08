@@ -14,11 +14,12 @@ use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
+use Livewire\Attributes\Url;
 use Livewire\Component;
 use Livewire\WithPagination;
 
 #[Layout('layouts::app')]
-#[Title('Turni')]
+#[Title('Agenda Pos')]
 class Turni extends Component
 {
     use ConAccesso, WithPagination;
@@ -27,8 +28,10 @@ class Turni extends Component
 
     public string $a = '';
 
+    #[Url(as: 'sede')]
     public ?int $filtroSede = null;
 
+    #[Url(as: 'operatore')]
     public ?int $filtroOperatore = null;
 
     public ?int $filtroCliente = null;
@@ -71,8 +74,6 @@ class Turni extends Component
     {
         $this->mese = today()->toDateString();
         $this->allineaSelezioniCalendario();
-        $this->da = now()->startOfWeek()->toDateString();
-        $this->a = now()->endOfWeek()->toDateString();
     }
 
     public function updating($name): void
@@ -425,7 +426,9 @@ class Turni extends Component
             ->when($this->filtroSede, fn (Builder $query) => $query->where('id_sede', $this->filtroSede))
             ->when($this->filtroOperatore, fn (Builder $query) => $query->where('id_operatore', $this->filtroOperatore))
             ->when($this->filtroCliente, fn (Builder $query) => $query->where('id_cliente', $this->filtroCliente))
-            ->when($this->filtroStato !== '', fn (Builder $query) => $this->filtraPerStato($query, $this->filtroStato));
+            ->when($this->filtroStato !== '', fn (Builder $query) => $this->filtraPerStato($query, $this->filtroStato))
+            ->when($this->da, fn (Builder $query) => $query->where('data_inizio', '>=', $this->da))
+            ->when($this->a, fn (Builder $query) => $query->where('data_inizio', '<=', $this->a));
     }
 
     /** Stessi stati di Turno::statoEffettivo (legenda dei colori di Yii). */
@@ -446,31 +449,13 @@ class Turni extends Component
         };
     }
 
-    /**
-     * Come Turni::getTotali: somma delle ore previste nel periodo, un solo criterio con priorità cliente, sede, operatore.
-     *
-     * @return array{etichetta: string, ore: float}|null
-     */
-    private function totali(): ?array
+    private function totaleOreAgenda(): ?float
     {
-        [$etichetta, $colonna, $valore] = match (true) {
-            (bool) $this->filtroCliente => ['cliente', 'id_cliente', $this->filtroCliente],
-            (bool) $this->filtroSede => ['sede', 'id_sede', $this->filtroSede],
-            (bool) $this->filtroOperatore => ['operatore', 'id_operatore', $this->filtroOperatore],
-            default => [null, null, null],
-        };
-
-        if (! $etichetta) {
+        if (! $this->filtroCliente && ! $this->filtroSede && ! $this->filtroOperatore && $this->filtroStato === '' && ! $this->da && ! $this->a) {
             return null;
         }
 
-        $ore = $this->query()
-            ->where($colonna, $valore)
-            ->when($this->da, fn ($q) => $q->where('data_inizio', '>=', Carbon::parse($this->da)->toDateString()))
-            ->when($this->a, fn ($q) => $q->where('data_inizio', '<=', Carbon::parse($this->a)->toDateString()))
-            ->sum('ore');
-
-        return ['etichetta' => $etichetta, 'ore' => (float) $ore];
+        return (float) $this->applicaRicerca($this->query())->sum('ore');
     }
 
     private function calendario(): array
@@ -503,8 +488,6 @@ class Turni extends Component
                 'sede.cliente',
                 'presenze' => fn ($query) => $query->whereIn('tipo', [Gda::INIZIO, Gda::FINE])->orderBy('data')->orderBy('orario'),
             ]))
-                ->when($this->da, fn ($q) => $q->where('data_inizio', '>=', Carbon::parse($this->da)->toDateString()))
-                ->when($this->a, fn ($q) => $q->where('data_inizio', '<=', Carbon::parse($this->a)->toDateString()))
                 ->orderBy('data_inizio')->orderBy('ora_inizio')->paginate(15);
         }
         $calendario = $this->vista === 'lista' ? null : $this->calendario();
@@ -560,8 +543,10 @@ class Turni extends Component
             ? $this->query()->with(['operatore', 'sede.cliente'])->find($this->turnoModificaId)
             : null;
 
+        $clienti = $this->clientiVisibili()->orderBy('ragione_sociale')->get(['id', 'ragione_sociale']);
+
         return view('livewire.turni', [
-            'totali' => $this->vista === 'lista' ? $this->totali() : null,
+            'totaleOreAgenda' => $this->totaleOreAgenda(),
             'sediInvio' => $this->modalInvio ? $this->sediVisibili()->orderBy('descrizione')->get(['id', 'descrizione']) : collect(),
             'operatoriInvio' => $this->modalInvio ? Admin::where('user_type', 4)->where('attivo', 'Y')->orderBy('cognome')->get() : collect(),
             'turnoModifica' => $turnoModifica,
@@ -572,7 +557,8 @@ class Turni extends Component
             'suggerimentiOperatori' => $suggerimentiOperatori,
             'sedeSelezionata' => $sedeSelezionata,
             'operatoreSelezionato' => $operatoreSelezionato,
-            'clienti' => $this->clientiVisibili()->orderBy('ragione_sociale')->get(['id', 'ragione_sociale']),
+            'clienti' => $clienti,
+            'clienteSelezionato' => $clienti->firstWhere('id', $this->filtroCliente),
             'sediForm' => $sediForm,
             'disponibili' => $disponibili,
             'giorniSettimana' => [1 => 'Lun', 2 => 'Mar', 3 => 'Mer', 4 => 'Gio', 5 => 'Ven', 6 => 'Sab', 7 => 'Dom'],

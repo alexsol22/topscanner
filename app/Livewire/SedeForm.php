@@ -10,12 +10,15 @@ use App\Models\Legacy\Provincia;
 use App\Models\Legacy\Sede;
 use App\Models\Legacy\Tracking;
 use App\Services\Geocoding;
+use App\Services\QrSede;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 use Livewire\WithFileUploads;
+use LogicException;
+use Throwable;
 
 #[Layout('layouts::app')]
 class SedeForm extends Component
@@ -24,9 +27,11 @@ class SedeForm extends Component
 
     public ?int $sedeId = null;
 
+    public string $nomeCliente = '';
+
     public string $nomeSede = '';
 
-    public string $codiceSede = '';
+    public string $codiceSedeId = '';
 
     public ?string $fotoSede = null;
 
@@ -34,7 +39,7 @@ class SedeForm extends Component
 
     public array $f = [];
 
-    /** @var array<string, array{id: ?int, titolo: string, passaggi: mixed, minuti: mixed, info: string, codice: string, file: ?string}> */
+    /** @var array<string, array{id: ?int, codice_id: string, titolo: string, passaggi: mixed, minuti: mixed, info: string, file: ?string}> */
     public array $postazioni = [];
 
     public array $immaginiPostazioni = [];
@@ -65,8 +70,10 @@ class SedeForm extends Component
             'f.pos' => 'nullable|string|max:65535',
             'f.inizio_contratto' => 'nullable|date',
             'f.fine_contratto' => 'nullable|date|after_or_equal:f.inizio_contratto',
+            'codiceSedeId' => 'required|string',
             'foto' => 'nullable|image|max:4096',
             'postazioni.*.titolo' => 'required|string|max:255',
+            'postazioni.*.codice_id' => 'required|string',
             'postazioni.*.passaggi' => 'nullable|integer|min:0|max:1000',
             'postazioni.*.minuti' => 'nullable|integer|min:0|max:1440',
             'postazioni.*.info' => 'nullable|string|max:65535',
@@ -88,9 +95,10 @@ class SedeForm extends Component
             return;
         }
 
-        $s = $this->sediVisibili()->with(['cliente', 'codice', 'postazioni.codice'])->findOrFail($sede);
+        $s = $this->sediVisibili()->with(['cliente', 'postazioni'])->findOrFail($sede);
         $this->sedeId = $s->id;
-        $this->nomeSede = trim($s->descrizione.' · '.$s->cliente?->ragione_sociale, ' ·');
+        $this->nomeCliente = (string) $s->cliente?->ragione_sociale;
+        $this->nomeSede = $s->descrizione;
         $this->f = collect(self::CAMPI)->mapWithKeys(fn ($k) => [$k => $s->$k ?? ''])->all();
         $this->f['cliente_id'] = $s->id_cliente;
         $this->f['citta'] = $s->comune?->comune ?? '';
@@ -100,15 +108,15 @@ class SedeForm extends Component
         $this->f['pos'] = (string) $s->pos;
         $this->f['inizio_contratto'] = $s->inizio_contratto?->format('Y-m-d') ?? '';
         $this->f['fine_contratto'] = $s->fine_contratto?->format('Y-m-d') ?? '';
-        $this->codiceSede = (string) $s->codice?->codice;
+        $this->codiceSedeId = (string) $s->id_codice;
         $this->fotoSede = $s->foto;
         $this->postazioni = $s->postazioni->sortBy('id')->mapWithKeys(fn (Postazione $p) => ['p'.$p->id => [
             'id' => $p->id,
+            'codice_id' => (string) $p->id_codice,
             'titolo' => (string) $p->titolo,
             'passaggi' => $p->passaggi ?? '',
             'minuti' => $p->minuti ?? '',
             'info' => (string) $p->info,
-            'codice' => (string) $p->codice?->codice,
             'file' => $p->file,
         ]])->all();
         $this->ore = collect(range(1, 7))->mapWithKeys(fn ($g) => [$g => $s->ore_richieste[$g] ?? ''])->all();
@@ -116,7 +124,7 @@ class SedeForm extends Component
 
     public function aggiungiPostazione(): void
     {
-        $this->postazioni['n'.Str::random(6)] = ['id' => null, 'titolo' => '', 'passaggi' => '', 'minuti' => '', 'info' => '', 'codice' => '', 'file' => null];
+        $this->postazioni['n'.Str::random(6)] = ['id' => null, 'codice_id' => '', 'titolo' => '', 'passaggi' => '', 'minuti' => '', 'info' => '', 'file' => null];
     }
 
     public function rimuoviPostazione(string $chiave): void
@@ -133,6 +141,7 @@ class SedeForm extends Component
         $this->soloStaff();
         try {
             $this->validate();
+            $this->validaCodiciSelezionati();
         } catch (ValidationException $e) {
             $this->dispatch('tab-errore', tab: $this->tabConErrori(array_keys($e->errors())));
 
@@ -185,24 +194,28 @@ class SedeForm extends Component
             $dati[$colonna] = $this->ore[$n] === '' ? null : (int) $this->ore[$n];
         }
 
+        $codiciGenerati = $this->preparaCodici();
+
         // Niente transazione: le tabelle legacy sono MyISAM e GTID vieta di mischiarle con tabelle transazionali.
         if ($this->sedeId) {
             $sede = $this->sediVisibili()->findOrFail($this->sedeId);
             $sede->update($dati);
         } else {
             $sede = Sede::create($dati);
-            $sede->update(['id_codice' => Codice::nuovo(Codice::SEDE, $sede->id)->id]);
         }
 
+        $codiceSede = $this->associaCodiceSede($sede, $codiciGenerati['sede'] ?? null);
+        $sede->update(['id_codice' => $codiceSede->id]);
+
         $this->salvaFoto($sede);
-        $this->salvaPostazioni($sede);
+        $this->salvaPostazioni($sede, $codiciGenerati['postazioni'] ?? []);
 
         Tracking::registra(($this->sedeId ? 'Aggiornamento dati sede ' : 'Creazione sede ').$sede->descrizione);
         if (! $sede->lat && ! $sede->lng) {
             session()->flash('avviso', "Sede {$sede->descrizione} salvata senza coordinate: il controllo della distanza di scansione non funzionerà finché non le imposti.");
         }
 
-        return $this->redirectRoute('sedi', navigate: true);
+        return $this->redirectRoute('sedi', ['cliente' => $this->f['cliente_id']], navigate: true);
     }
 
     private function salvaFoto(Sede $sede): void
@@ -219,7 +232,8 @@ class SedeForm extends Component
         $sede->update(['foto' => $nome]);
     }
 
-    private function salvaPostazioni(Sede $sede): void
+    /** @param array<string, string> $codiciGenerati */
+    private function salvaPostazioni(Sede $sede, array $codiciGenerati): void
     {
         $daEliminare = $sede->postazioni()->whereIn('id', $this->postazioniEliminate)->get();
         $daEliminare->each(fn (Postazione $p) => Storage::disk(config('filesystems.files_disk'))->deleteDirectory($p->cartella()));
@@ -239,8 +253,10 @@ class SedeForm extends Component
                 $postazione->update($campi);
             } else {
                 $postazione = $sede->postazioni()->create($campi);
-                $postazione->update(['id_codice' => Codice::nuovo(Codice::POSTAZIONE, $sede->id, $postazione->id)->id]);
             }
+
+            $codice = $this->associaCodicePostazione($postazione, (string) $dati['codice_id'], $codiciGenerati[$chiave] ?? null);
+            $postazione->update(['id_codice' => $codice->id]);
 
             if ($immagine = $this->immaginiPostazioni[$chiave] ?? null) {
                 $nome = 'Postazione-'.$postazione->id.'-'.time().'.'.strtolower($immagine->getClientOriginalExtension());
@@ -249,6 +265,198 @@ class SedeForm extends Component
                 $postazione->update(['file' => $nome]);
             }
         }
+    }
+
+    private function validaCodiciSelezionati(): void
+    {
+        $sede = $this->sedeId
+            ? $this->sediVisibili()->with('postazioni')->findOrFail($this->sedeId)
+            : null;
+        $scelte = [[
+            'campo' => 'codiceSedeId',
+            'valore' => $this->codiceSedeId,
+            'corrente' => $sede?->id_codice,
+            'sede' => $sede?->id,
+            'postazione' => null,
+            'tipo' => Codice::SEDE,
+        ]];
+
+        foreach ($this->postazioni as $chiave => $dati) {
+            $postazione = $dati['id'] && $sede
+                ? $sede->postazioni->firstWhere('id', (int) $dati['id'])
+                : null;
+
+            if ($dati['id'] && ! $postazione) {
+                throw ValidationException::withMessages([
+                    "postazioni.$chiave.id" => 'La postazione selezionata non appartiene a questa sede.',
+                ]);
+            }
+
+            $scelte[] = [
+                'campo' => "postazioni.$chiave.codice_id",
+                'valore' => (string) $dati['codice_id'],
+                'corrente' => $postazione?->id_codice,
+                'sede' => $sede?->id,
+                'postazione' => $postazione?->id,
+                'tipo' => Codice::POSTAZIONE,
+            ];
+        }
+
+        $errori = [];
+        $codiciSelezionati = [];
+
+        foreach ($scelte as $scelta) {
+            $valore = $scelta['valore'];
+            if ($valore === 'XX') {
+                if (Codice::where('stato', Codice::CREATO)->exists()) {
+                    $errori[$scelta['campo']][] = 'Non ci sono QR validi da generare per questa selezione.';
+                }
+
+                continue;
+            }
+
+            $codiceId = filter_var($valore, FILTER_VALIDATE_INT);
+            $valido = $codiceId && Codice::query()
+                ->whereKey($codiceId)
+                ->where(function ($query) use ($codiceId, $scelta): void {
+                    $query->where('stato', Codice::CREATO);
+
+                    if ((int) $scelta['corrente'] === $codiceId && $scelta['sede']) {
+                        $query->orWhere(function ($query) use ($scelta): void {
+                            $query->where('tipo', $scelta['tipo'])
+                                ->where('id_sede', $scelta['sede']);
+
+                            if ($scelta['postazione']) {
+                                $query->where('id_postazione', $scelta['postazione']);
+                            } else {
+                                $query->whereNull('id_postazione');
+                            }
+                        });
+                    }
+                })
+                ->exists();
+
+            if (! $valido) {
+                $errori[$scelta['campo']][] = 'Seleziona un QR libero o quello già associato a questo elemento.';
+
+                continue;
+            }
+
+            if (isset($codiciSelezionati[$codiceId])) {
+                $messaggio = 'Lo stesso QR non può essere assegnato a più elementi.';
+                $errori[$scelta['campo']][] = $messaggio;
+                $errori[$codiciSelezionati[$codiceId]][] = $messaggio;
+
+                continue;
+            }
+
+            $codiciSelezionati[$codiceId] = $scelta['campo'];
+        }
+
+        if ($errori !== []) {
+            throw ValidationException::withMessages($errori);
+        }
+    }
+
+    /** @return array{sede?: string, postazioni?: array<string, string>} */
+    private function preparaCodici(): array
+    {
+        $qr = app(QrSede::class);
+        $generati = [];
+        $risultato = [];
+
+        try {
+            if ($this->codiceSedeId === 'XX') {
+                $codice = Codice::generaCodice();
+                $qr->genera($codice);
+                $generati[] = $codice;
+                $risultato['sede'] = $codice;
+            }
+
+            foreach ($this->postazioni as $chiave => $dati) {
+                if ($dati['codice_id'] !== 'XX') {
+                    continue;
+                }
+
+                do {
+                    $codice = Codice::generaCodice();
+                } while (in_array($codice, $generati, true));
+
+                $qr->genera($codice);
+                $generati[] = $codice;
+                $risultato['postazioni'][$chiave] = $codice;
+            }
+        } catch (Throwable $e) {
+            foreach ($generati as $codice) {
+                try {
+                    Storage::disk(config('filesystems.files_disk'))->delete($qr->percorso($codice));
+                } catch (Throwable $errorePulizia) {
+                    report($errorePulizia);
+                }
+            }
+
+            throw $e;
+        }
+
+        return $risultato;
+    }
+
+    private function associaCodiceSede(Sede $sede, ?string $codiceGenerato): Codice
+    {
+        if ($this->codiceSedeId === 'XX') {
+            return Codice::nuovo(Codice::SEDE, $sede->id, null, $codiceGenerato ?? throw new LogicException('QR sede non preparato.'));
+        }
+
+        $codice = Codice::findOrFail((int) $this->codiceSedeId);
+        $codice->update([
+            'stato' => Codice::ATTIVO,
+            'tipo' => Codice::SEDE,
+            'id_sede' => $sede->id,
+            'id_postazione' => null,
+        ]);
+
+        return $codice;
+    }
+
+    private function associaCodicePostazione(Postazione $postazione, string $codiceId, ?string $codiceGenerato): Codice
+    {
+        if ($codiceId === 'XX') {
+            return Codice::nuovo(Codice::POSTAZIONE, $postazione->id_sede, $postazione->id, $codiceGenerato ?? throw new LogicException('QR postazione non preparato.'));
+        }
+
+        $codice = Codice::findOrFail((int) $codiceId);
+        $codice->update([
+            'stato' => Codice::ATTIVO,
+            'tipo' => Codice::POSTAZIONE,
+            'id_sede' => $postazione->id_sede,
+            'id_postazione' => $postazione->id,
+        ]);
+
+        return $codice;
+    }
+
+    /**
+     * @return array<int|string, string>
+     */
+    private function codiciSelezionabili(?int $codiceCorrente): array
+    {
+        $query = Codice::query()->where('stato', Codice::CREATO);
+
+        if ($codiceCorrente) {
+            $query->orWhereKey($codiceCorrente);
+        }
+
+        $risultati = $query->orderBy('codice')->get(['id', 'codice', 'stato']);
+        $haCodiciLiberi = $risultati->contains('stato', Codice::CREATO);
+        $codici = $risultati
+            ->mapWithKeys(fn (Codice $codice) => [$codice->id => $codice->codice])
+            ->all();
+
+        if (! $haCodiciLiberi) {
+            $codici['XX'] = 'CODICE DA GENERARE';
+        }
+
+        return $codici;
     }
 
     private function tabConErrori(array $campi): string
@@ -272,9 +480,25 @@ class SedeForm extends Component
 
     public function render()
     {
+        $clienti = $this->clientiVisibili()->orderBy('ragione_sociale')->get(['id', 'ragione_sociale']);
+        $nomeCliente = $clienti->firstWhere('id', (int) ($this->f['cliente_id'] ?? 0))?->ragione_sociale ?? $this->nomeCliente;
+        $sede = $this->sedeId
+            ? $this->sediVisibili()->with('postazioni')->findOrFail($this->sedeId)
+            : null;
+        $codiciPostazioni = collect($this->postazioni)->mapWithKeys(function (array $dati, string $chiave) use ($sede): array {
+            $postazione = $dati['id'] && $sede
+                ? $sede->postazioni->firstWhere('id', (int) $dati['id'])
+                : null;
+
+            return [$chiave => $this->codiciSelezionabili($postazione?->id_codice)];
+        });
+
         return view('livewire.sede-form', [
-            'clienti' => $this->clientiVisibili()->orderBy('ragione_sociale')->get(['id', 'ragione_sociale']),
+            'clienti' => $clienti,
+            'nomeCliente' => $nomeCliente,
+            'codiciSede' => $this->codiciSelezionabili($sede?->id_codice),
+            'codiciPostazioni' => $codiciPostazioni,
             'giorni' => [1 => 'Lun', 2 => 'Mar', 3 => 'Mer', 4 => 'Gio', 5 => 'Ven', 6 => 'Sab', 7 => 'Dom'],
-        ])->title($this->sedeId ? 'Modifica sede: '.$this->nomeSede : 'Nuova sede');
+        ])->title($this->sedeId ? 'Modifica / Gestisci sede e postazioni - '.$nomeCliente.' - '.$this->nomeSede : 'Nuova sede'.($nomeCliente ? ' - '.$nomeCliente : ''));
     }
 }

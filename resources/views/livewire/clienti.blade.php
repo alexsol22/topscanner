@@ -20,37 +20,89 @@
 
     @if (! $modal)
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div class="flex flex-col gap-2 sm:flex-row sm:flex-1">
-                <input type="search" wire:model.live.debounce.300ms="cerca" placeholder="Cerca cliente o città…" class="input sm:max-w-xs">
+            <h2 class="text-lg font-bold text-slate-800">Elenco clienti</h2>
+            <div class="flex items-center gap-2">
+                <x-ui.filtri title="Ricerca cliente" trigger-label="Ricerca cliente" :values="['filtroRagioneSociale' => $filtroRagioneSociale, 'filtroPiva' => $filtroPiva, 'filtroCodiceFiscale' => $filtroCodiceFiscale, 'filtroEmail' => $filtroEmail, 'filtroTelefono' => $filtroTelefono]">
+                    <x-slot:trigger>
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path stroke-linecap="round" d="m20 20-4-4"/></svg>
+                    </x-slot:trigger>
+                    <div class="grid gap-3 sm:grid-cols-2">
+                        <div><label for="cliente-ragione-sociale" class="label">Ragione Sociale</label><input id="cliente-ragione-sociale" type="search" x-model="valori.filtroRagioneSociale" class="input"></div>
+                        <div><label for="cliente-piva" class="label">P.iva</label><input id="cliente-piva" type="search" x-model="valori.filtroPiva" class="input"></div>
+                        <div><label for="cliente-codice-fiscale" class="label">Codice Fiscale</label><input id="cliente-codice-fiscale" type="search" x-model="valori.filtroCodiceFiscale" class="input"></div>
+                        <div><label for="cliente-email" class="label">Email</label><input id="cliente-email" type="search" x-model="valori.filtroEmail" class="input"></div>
+                        <div><label for="cliente-telefono" class="label">Telefono</label><input id="cliente-telefono" type="search" x-model="valori.filtroTelefono" class="input" inputmode="tel"></div>
+                    </div>
+                </x-ui.filtri>
+                <button type="button" wire:click="nuovo" title="Aggiungi cliente" aria-label="Aggiungi cliente" class="btn-primary !p-2">
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14m-7-7h14"/></svg>
+                </button>
             </div>
-            <button wire:click="nuovo" class="btn-primary">+ Nuovo cliente</button>
         </div>
 
         <div class="card overflow-hidden">
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-sky-100">
-                    <thead class="bg-sky-50/60"><tr><th class="th">Ragione Sociale</th><th class="th">Iva / Codice Fiscale</th><th class="th">Referente</th><th class="th">Email</th><th class="th">Telefono</th><th class="th text-center">Sedi</th><th class="th text-right">Azioni</th></tr></thead>
+                    <thead class="bg-sky-50/60">
+                        <tr>
+                            <th class="th">Ragione Sociale</th>
+                            <th class="th">Iva / Codice Fiscale</th>
+                            <th class="th">Referente</th>
+                            <th class="th">Email</th>
+                            <th class="th">Telefono</th>
+                            <th class="th text-center">Operatori</th>
+                            <th class="th text-center">Gestisci</th>
+                            <th class="th text-center">Mod</th>
+                            <th class="th text-center">Can</th>
+                        </tr>
+                    </thead>
                     <tbody class="divide-y divide-sky-50">
                         @forelse ($clienti as $c)
                             <tr wire:key="c{{ $c->id }}" class="hover:bg-sky-50/40">
                                 <td class="td font-semibold text-slate-800">{{ $c->ragione_sociale }}</td>
-                                <td class="td">{{ $c->piva ?: $c->codice_fiscale }}</td>
+                                <td class="td">
+                                    @if ($c->piva)
+                                        <div>P.iva: {{ $c->piva }}</div>
+                                    @endif
+                                    @if ($c->codice_fiscale)
+                                        <div>Codice fiscale: {{ $c->codice_fiscale }}</div>
+                                    @endif
+                                </td>
                                 <td class="td">{{ trim($c->nome.' '.$c->cognome) }}</td>
-                                <td class="td">{{ $c->email }}</td>
+                                <td class="td">
+                                    @if ($c->email)
+                                        <div>Email: {{ $c->email }}</div>
+                                    @endif
+                                    @if ($c->pec)
+                                        <div>Pec: {{ $c->pec }}</div>
+                                    @endif
+                                </td>
                                 <td class="td">{{ $c->telefono }}</td>
                                 <td class="td text-center">
-                                    <a href="{{ route('sedi', ['cliente' => $c->id]) }}" wire:navigate title="Vai alle sedi di {{ $c->ragione_sociale }}" @class(['inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-sm font-semibold transition', 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' => $c->sedi_count > 0, 'bg-rose-50 text-rose-600 hover:bg-rose-100' => $c->sedi_count === 0])>
-                                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0zM15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                                        {{ $c->sedi_count }}
+                                    @if ($c->operatori_preferiti_count + $c->operatori_esclusi_count > 0)
+                                        <button type="button" wire:click="mostraOperatori({{ $c->id }})" title="Visualizza operatori di {{ $c->ragione_sociale }}" aria-label="Visualizza operatori di {{ $c->ragione_sociale }}" class="btn-soft !p-2">
+                                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M16 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2m16 0v-2a4 4 0 00-3-3.87M14 3.13a4 4 0 010 7.75M10 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+                                        </button>
+                                    @endif
+                                </td>
+                                <td class="td text-center">
+                                    <a href="{{ route('sedi', ['cliente' => $c->id]) }}" wire:navigate title="Gestisci sedi di {{ $c->ragione_sociale }}" aria-label="Gestisci sedi di {{ $c->ragione_sociale }}" class="btn-soft !p-2">
+                                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-4h6v4M9 10h.01M12 10h.01M15 10h.01"/></svg>
                                     </a>
                                 </td>
-                                <td class="td whitespace-nowrap text-right">
-                                    <button wire:click="modifica({{ $c->id }})" class="btn-soft !px-3 !py-1.5">Modifica</button>
-                                    <button wire:click="richiediEliminazione({{ $c->id }})" class="btn-danger !px-3 !py-1.5">Elimina</button>
+                                <td class="td text-center">
+                                    <button type="button" wire:click="modifica({{ $c->id }})" title="Modifica cliente {{ $c->ragione_sociale }}" aria-label="Modifica cliente {{ $c->ragione_sociale }}" class="btn-soft !p-2">
+                                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l2.651 2.651M5 19l4.25-.85L19.513 7.887a1.875 1.875 0 00-2.65-2.65L6.6 15.5 5 19z"/></svg>
+                                    </button>
+                                </td>
+                                <td class="td text-center">
+                                    <button type="button" wire:click="richiediEliminazione({{ $c->id }})" title="Cancella cliente {{ $c->ragione_sociale }}" aria-label="Cancella cliente {{ $c->ragione_sociale }}" class="btn-danger !p-2">
+                                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 7h12m-10 0V5h8v2m-9 0l1 13h8l1-13M10 11v5m4-5v5"/></svg>
+                                    </button>
                                 </td>
                             </tr>
                         @empty
-                            <tr><td colspan="7" class="td py-10 text-center text-slate-500">Nessun cliente trovato.</td></tr>
+                            <tr><td colspan="9" class="td py-10 text-center text-slate-500">Nessun cliente trovato.</td></tr>
                         @endforelse
                     </tbody>
                 </table>
@@ -121,9 +173,9 @@
 
                 @if ($tab === 'operatori')
                     @php($elencoOperatori = $operatori->map(fn ($o) => ['id' => (string) $o->id, 'nome' => trim($o->cognome.' '.$o->nome)])->values())
-                    <div class="grid gap-4 lg:grid-cols-2">
+                    <div class="space-y-4">
                         <x-ui.multi-select label="Operatori preferiti" model="preferiti" :options="$elencoOperatori" />
-                        <x-ui.multi-select label="Escludi operatori" model="escludi" :options="$elencoOperatori" tone="rose" />
+                        <x-ui.multi-select label="Escludi operatori" model="escludi" :options="$elencoOperatori" />
                     </div>
                 @endif
 
@@ -133,5 +185,33 @@
                 </div>
             </form>
         </div>
+    @endif
+
+    @if ($clienteOperatori)
+        <x-ui.modal title="Operatori cliente — {{ $clienteOperatori->ragione_sociale }}" close="chiudiOperatori">
+            <div class="space-y-5">
+                @foreach (['Preferiti' => [$operatoriPreferiti, 'emerald'], 'Esclusi' => [$operatoriEsclusi, 'rose']] as $gruppo => [$operatoriGruppo, $colore])
+                    @if ($operatoriGruppo->isNotEmpty())
+                        <section>
+                            <h4 @class(['mb-2 text-sm font-bold', 'text-emerald-700' => $colore === 'emerald', 'text-rose-700' => $colore === 'rose'])>Operatori {{ $gruppo }}</h4>
+                            <div class="overflow-x-auto rounded-xl ring-1 ring-sky-100">
+                                <table class="min-w-full divide-y divide-sky-100 text-sm">
+                                    <thead class="bg-sky-50/60"><tr><th class="px-3 py-2 text-left font-semibold">Codice</th><th class="px-3 py-2 text-left font-semibold">Operatore</th><th class="px-3 py-2 text-right font-semibold">Costo / ora</th></tr></thead>
+                                    <tbody class="divide-y divide-sky-50">
+                                        @foreach ($operatoriGruppo as $associazione)
+                                            <tr wire:key="operatore-{{ $gruppo }}-{{ $associazione->id }}">
+                                                <td class="px-3 py-2">{{ $associazione->operatore?->codice ?: '—' }}</td>
+                                                <td class="px-3 py-2">{{ trim(($associazione->operatore?->cognome ?? '').' '.($associazione->operatore?->nome ?? '')) ?: 'Operatore non disponibile' }}</td>
+                                                <td class="px-3 py-2 text-right">{{ $associazione->operatore?->costo_orario ? number_format($associazione->operatore->costo_orario, 2, ',', '.').' €' : '—' }}</td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                        </section>
+                    @endif
+                @endforeach
+            </div>
+        </x-ui.modal>
     @endif
 </div>

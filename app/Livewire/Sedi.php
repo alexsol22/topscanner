@@ -3,11 +3,13 @@
 namespace App\Livewire;
 
 use App\Livewire\Concerns\ConAccesso;
+use App\Models\Legacy\Cliente;
 use App\Models\Legacy\Codice;
 use App\Models\Legacy\Documento;
 use App\Models\Legacy\Postazione;
 use App\Models\Legacy\Tracking;
 use App\Models\Legacy\Turno;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Attributes\Layout;
@@ -22,14 +24,16 @@ class Sedi extends Component
 {
     use ConAccesso, WithPagination;
 
-    public string $cerca = '';
+    public string $filtroDenominazione = '';
+
+    public string $filtroEmail = '';
+
+    public string $filtroTelefono = '';
 
     #[Url(as: 'cliente')]
     public ?int $filtroCliente = null;
 
     public bool $modalPostazioni = false;
-
-    public ?int $sedeQr = null;
 
     public ?int $sedePostazioni = null;
 
@@ -37,14 +41,22 @@ class Sedi extends Component
 
     public string $conferma = '';
 
-    public array $p = ['titolo' => '', 'minuti_passaggio' => ''];
-
     public function mount(): void
     {
         Tracking::registra('Visualizzazione elenco Sedi ');
     }
 
-    public function updatingCerca(): void
+    public function updatingFiltroDenominazione(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatingFiltroEmail(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatingFiltroTelefono(): void
     {
         $this->resetPage();
     }
@@ -111,7 +123,9 @@ class Sedi extends Component
     public function esporta()
     {
         $this->soloStaff();
-        $sedi = $this->querySedi()->with(['cliente', 'comune', 'provincia'])->withCount(['postazioni', 'turni'])->orderBy('descrizione')->get();
+        $cliente = $this->clienteCorrente();
+        abort_unless($cliente, 404);
+        $sedi = $this->querySedi($cliente->id)->with(['cliente', 'comune', 'provincia'])->withCount(['postazioni', 'turni'])->orderBy('descrizione')->get();
         Tracking::registra('Esportazione elenco Sedi');
 
         return response()->streamDownload(function () use ($sedi) {
@@ -129,48 +143,29 @@ class Sedi extends Component
         }, 'sedi-'.now()->format('Y-m-d').'.csv', ['Content-Type' => 'text/csv; charset=UTF-8']);
     }
 
-    private function querySedi()
+    private function clienteCorrente(): ?Cliente
+    {
+        $clienteId = auth()->user()->isCliente()
+            ? auth()->user()->id_cliente
+            : $this->filtroCliente;
+
+        return $clienteId ? $this->clientiVisibili()->findOrFail($clienteId) : null;
+    }
+
+    private function querySedi(?int $clienteId): Builder
     {
         return $this->sediVisibili()
-            ->when($this->filtroCliente, fn ($q) => $q->where('id_cliente', $this->filtroCliente))
-            ->when($this->cerca, fn ($q) => $q->where(fn ($w) => $w->where('descrizione', 'like', "%{$this->cerca}%")
-                ->orWhereHas('comune', fn ($c) => $c->where('comune', 'like', "%{$this->cerca}%"))));
-    }
-
-    public function qr(int $id): void
-    {
-        $this->soloStaff();
-        $this->sedeQr = $this->sediVisibili()->findOrFail($id)->id;
-    }
-
-    public function chiudiQr(): void
-    {
-        $this->sedeQr = null;
+            ->when($clienteId === null, fn ($q) => $q->whereRaw('1 = 0'), fn ($q) => $q->where('id_cliente', $clienteId))
+            ->when($this->filtroDenominazione, fn ($q) => $q->where('descrizione', 'like', "%{$this->filtroDenominazione}%"))
+            ->when($this->filtroEmail, fn ($q) => $q->where('email', 'like', "%{$this->filtroEmail}%"))
+            ->when($this->filtroTelefono, fn ($q) => $q->where('telefono', 'like', "%{$this->filtroTelefono}%"));
     }
 
     public function postazioni(int $id): void
     {
         $this->sedePostazioni = $this->sediVisibili()->findOrFail($id)->id;
-        $this->p = ['titolo' => '', 'minuti_passaggio' => ''];
         $this->resetValidation();
         $this->modalPostazioni = true;
-    }
-
-    public function aggiungiPostazione(): void
-    {
-        $this->soloStaff();
-        $this->validate([
-            'p.titolo' => 'required|string|max:255',
-            'p.minuti_passaggio' => 'nullable|integer|min:1|max:1440',
-        ]);
-        $sede = $this->sediVisibili()->findOrFail($this->sedePostazioni);
-
-        $post = Postazione::create([
-            'id_sede' => $sede->id, 'id_cliente' => $sede->id_cliente,
-            'titolo' => $this->p['titolo'], 'minuti' => $this->p['minuti_passaggio'] ?: null,
-        ]);
-        $post->update(['id_codice' => Codice::nuovo(Codice::POSTAZIONE, $sede->id, $post->id)->id]);
-        $this->p = ['titolo' => '', 'minuti_passaggio' => ''];
     }
 
     public function eliminaPostazione(int $id): void
@@ -185,21 +180,24 @@ class Sedi extends Component
 
     public function render()
     {
-        $sedi = $this->querySedi()->with(['cliente', 'comune'])->withCount(['postazioni', 'turni', 'turni as turni_conclusi_count' => fn ($q) => $q->where('stato', 'F')])
+        $clienteCorrente = $this->clienteCorrente();
+        $sedi = $this->querySedi($clienteCorrente?->id)->with(['codice', 'comune'])->withCount(['turni', 'turni as turni_conclusi_count' => fn ($q) => $q->where('stato', 'F')])
             ->orderBy('descrizione')->paginate(9);
 
         $daEliminare = $this->eliminaId ? $this->sediVisibili()->find($this->eliminaId) : null;
 
         return view('livewire.sedi', [
             'sedi' => $sedi,
+            'clienteCorrente' => $clienteCorrente,
             'daEliminare' => $daEliminare,
             'riepilogo' => $daEliminare ? [
                 'turni' => Turno::where('id_sede', $daEliminare->id)->count(),
                 'presenze' => $daEliminare->presenze()->count(),
                 'postazioni' => $daEliminare->postazioni()->count(),
             ] : null,
-            'clienti' => $this->clientiVisibili()->orderBy('ragione_sociale')->get(['id', 'ragione_sociale']),
-            'sedeCorrente' => $this->sedePostazioni ? $this->sediVisibili()->with('postazioni.codice', 'codice')->find($this->sedePostazioni) : null,
+            'sedeCorrente' => $this->sedePostazioni
+                ? $this->sediVisibili()->with(['codice', 'comune', 'provincia', 'postazioni.codice'])->find($this->sedePostazioni)
+                : null,
         ]);
     }
 }

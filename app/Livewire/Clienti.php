@@ -34,6 +34,16 @@ class Clienti extends Component
 
     public string $cerca = '';
 
+    public string $filtroRagioneSociale = '';
+
+    public string $filtroPiva = '';
+
+    public string $filtroCodiceFiscale = '';
+
+    public string $filtroEmail = '';
+
+    public string $filtroTelefono = '';
+
     #[Url(as: 'form')]
     public bool $modal = false;
 
@@ -52,6 +62,8 @@ class Clienti extends Component
     public array $escludi = [];
 
     public ?int $eliminaId = null;
+
+    public ?int $operatoriClienteId = null;
 
     public string $conferma = '';
 
@@ -93,6 +105,13 @@ class Clienti extends Component
     public function updatingCerca(): void
     {
         $this->resetPage();
+    }
+
+    public function updating(string $name): void
+    {
+        if (in_array($name, ['filtroRagioneSociale', 'filtroPiva', 'filtroCodiceFiscale', 'filtroEmail', 'filtroTelefono'], true)) {
+            $this->resetPage();
+        }
     }
 
     /** Dopo un refresh il form riapre lo stesso record (stato preso dall'URL). */
@@ -142,6 +161,16 @@ class Clienti extends Component
         $this->reset('tab', 'titoloDocumento', 'fileDocumento');
         $this->resetValidation();
         $this->modal = true;
+    }
+
+    public function mostraOperatori(int $id): void
+    {
+        $this->operatoriClienteId = $this->clientiVisibili()->findOrFail($id)->id;
+    }
+
+    public function chiudiOperatori(): void
+    {
+        $this->operatoriClienteId = null;
     }
 
     public function updatedFProvinciaId(): void
@@ -329,16 +358,25 @@ class Clienti extends Component
 
     public function render()
     {
-        $clienti = $this->clientiVisibili()->with(['comune', 'provincia'])->withCount('sedi')
+        $clienti = $this->clientiVisibili()->with(['comune', 'provincia'])->withCount(['operatoriPreferiti', 'operatoriEsclusi'])
             ->when($this->cerca, fn ($q) => $q->where(fn ($w) => $w->where('ragione_sociale', 'like', "%{$this->cerca}%")->orWhereHas('comune', fn ($c) => $c->where('comune', 'like', "%{$this->cerca}%"))))
+            ->when($this->filtroRagioneSociale !== '', fn ($q) => $q->where('ragione_sociale', 'like', "%{$this->filtroRagioneSociale}%"))
+            ->when($this->filtroPiva !== '', fn ($q) => $q->where('piva', 'like', "%{$this->filtroPiva}%"))
+            ->when($this->filtroCodiceFiscale !== '', fn ($q) => $q->where('codice_fiscale', 'like', "%{$this->filtroCodiceFiscale}%"))
+            ->when($this->filtroEmail !== '', fn ($q) => $q->where('email', 'like', "%{$this->filtroEmail}%"))
+            ->when($this->filtroTelefono !== '', fn ($q) => $q->where('telefono', 'like', "%{$this->filtroTelefono}%"))
             ->orderBy('ragione_sociale')->paginate(10);
 
         $daEliminare = $this->eliminaId ? $this->clientiVisibili()->find($this->eliminaId) : null;
+        $clienteOperatori = $this->operatoriClienteId ? $this->clientiVisibili()->findOrFail($this->operatoriClienteId) : null;
 
         return view('livewire.clienti', [
             'daEliminare' => $daEliminare,
             'riepilogo' => $daEliminare ? $this->riepilogoEliminazione() : [],
             'clienti' => $clienti,
+            'clienteOperatori' => $clienteOperatori,
+            'operatoriPreferiti' => $clienteOperatori?->operatoriPreferiti()->with('operatore')->get() ?? collect(),
+            'operatoriEsclusi' => $clienteOperatori?->operatoriEsclusi()->with('operatore')->get() ?? collect(),
             'province' => Provincia::orderBy('nome')->get(['id', 'nome', 'sigla']),
             'operatori' => $this->modal ? Admin::where('user_type', 4)->where('attivo', 'Y')->orderBy('cognome')->orderBy('nome')->get(['id', 'nome', 'cognome']) : collect(),
             'documenti' => $this->modal && $this->clienteId ? Documento::where('tipo', 'C')->where('id_tipo', $this->clienteId)->orderByDesc('id')->get() : collect(),

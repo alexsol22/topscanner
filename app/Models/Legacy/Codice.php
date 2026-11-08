@@ -46,10 +46,10 @@ class Codice extends LegacyModel
     }
 
     /** Equivale a generateCodes(1) + associaCodice di Yii: la riga nasce 'C' e viene subito associata ('A'). */
-    public static function nuovo(string $tipo, int $sedeId, ?int $postazioneId = null): self
+    public static function nuovo(string $tipo, int $sedeId, ?int $postazioneId, string $codice): self
     {
         return static::create([
-            'codice' => self::generaCodice(),
+            'codice' => $codice,
             'stato' => self::ATTIVO,
             'tipo' => $tipo,
             'id_sede' => $sedeId,

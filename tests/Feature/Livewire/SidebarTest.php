@@ -43,14 +43,58 @@ class SidebarTest extends TestCase
         });
     }
 
-    public function test_staff_sidebar_links_every_section_without_disabled_entries(): void
+    public function test_staff_sidebar_matches_legacy_sections_with_operatori_label(): void
     {
         $staff = User::create(['user' => 'staff', 'password' => 'secret', 'attivo' => 'Y', 'user_type' => 2, 'nome' => 'Alessia', 'cognome' => 'Verdi']);
 
-        $risposta = $this->actingAs($staff)->get(route('accessi'))->assertOk()->assertDontSee('Disponibile prossimamente');
+        $risposta = $this->actingAs($staff)->get(route('accessi'))->assertOk();
 
-        foreach (['dashboard', 'amministratori', 'accessi', 'clienti', 'operatori', 'sedi', 'turni', 'presenze', 'bacheca', 'messaggi', 'messaggi.modelli', 'documenti'] as $rotta) {
+        $risposta->assertSee('href="'.url('/').'"', false);
+
+        foreach (['clienti', 'operatori', 'turni', 'documenti', 'bacheca', 'messaggi', 'amministratori'] as $rotta) {
             $risposta->assertSee('href="'.route($rotta).'"', false);
         }
+
+        foreach ([
+            route('presenze'),
+            route('presenze.clienti'),
+            route('presenze.operatori'),
+            route('messaggi.canale', ['canale' => 'sms']),
+            route('messaggi.canale', ['canale' => 'email']),
+        ] as $url) {
+            $risposta->assertSee('href="'.$url.'"', false);
+        }
+
+        $risposta->assertSee('Operatori')
+            ->assertSee('aria-label="Navigazione principale"', false)
+            ->assertSee('aria-controls="navigazione-principale"', false)
+            ->assertDontSee('id="ricerca-pagine"', false)
+            ->assertSee('Bacheca')
+            ->assertSee('Agenda Pos')
+            ->assertSee('Orari clienti')
+            ->assertSee('Orari operatori')
+            ->assertSee('SMS inviati')
+            ->assertSee('Email inviate')
+            ->assertSee('WhatsApp inviati')
+            ->assertSee('aria-disabled="true"', false)
+            ->assertSee('Utenti')
+            ->assertDontSee('Data Base');
+        $risposta->assertDontSee('href="'.route('accessi').'"', false);
+        $risposta->assertDontSee('href="'.route('messaggi.modelli').'"', false);
+        $risposta->assertDontSee('href="'.route('sedi').'"', false);
+    }
+
+    public function test_staff_home_redirects_to_clienti(): void
+    {
+        $staff = User::create(['user' => 'staff', 'password' => 'secret', 'attivo' => 'Y', 'user_type' => 2, 'nome' => 'Alessia', 'cognome' => 'Verdi']);
+
+        $this->actingAs($staff)->get('/')->assertRedirectToRoute('clienti');
+    }
+
+    public function test_dashboard_route_is_removed(): void
+    {
+        $staff = User::create(['user' => 'staff', 'password' => 'secret', 'attivo' => 'Y', 'user_type' => 2, 'nome' => 'Alessia', 'cognome' => 'Verdi']);
+
+        $this->actingAs($staff)->get('/dashboard')->assertNotFound();
     }
 }

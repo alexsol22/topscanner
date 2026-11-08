@@ -59,6 +59,16 @@ class Cliente extends LegacyModel
         return $this->hasMany(Admin::class, 'id_cliente');
     }
 
+    public function operatoriPreferiti(): HasMany
+    {
+        return $this->hasMany(OperatorePreferito::class, 'id_cliente');
+    }
+
+    public function operatoriEsclusi(): HasMany
+    {
+        return $this->hasMany(OperatoreEscludi::class, 'id_cliente');
+    }
+
     /** Come Yii: super (tipo 1) solo clienti di test, cliente (tipo 3) solo se stesso, gli altri tutti tranne i test. */
     public function scopeVisibiliA(Builder $q, User $user): Builder
     {

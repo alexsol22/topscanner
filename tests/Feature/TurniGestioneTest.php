@@ -166,14 +166,38 @@ class TurniGestioneTest extends TestCase
         $this->assertSame([1, 2, 3, 4, 5, 6], $this->idsLista($this->lista()));
     }
 
-    public function test_filtro_cliente_e_totali_con_priorita_cliente_sede_operatore(): void
+    public function test_filtro_cliente_e_totali_con_filtri_combinati(): void
     {
-        $this->assertNull($this->lista()->viewData('totali'));
+        $this->assertSame(23.0, $this->lista()->viewData('totaleOreAgenda'));
 
         $this->assertSame([4, 5, 6], $this->idsLista($this->lista()->set('filtroCliente', 2)));
-        $this->assertSame(['etichetta' => 'cliente', 'ore' => 15.0], $this->lista()->set('filtroCliente', 2)->viewData('totali'));
-        $this->assertSame(['etichetta' => 'cliente', 'ore' => 15.0], $this->lista()->set('filtroCliente', 2)->set('filtroOperatore', 2)->viewData('totali'));
-        $this->assertSame(['etichetta' => 'operatore', 'ore' => 4.0], $this->lista()->set('filtroOperatore', 2)->viewData('totali'));
+        $this->assertSame(15.0, $this->lista()->set('filtroCliente', 2)->viewData('totaleOreAgenda'));
+        $this->assertSame(0.0, $this->lista()->set('filtroCliente', 2)->set('filtroOperatore', 2)->viewData('totaleOreAgenda'));
+        $this->assertSame(4.0, $this->lista()->set('filtroOperatore', 2)->viewData('totaleOreAgenda'));
+    }
+
+    public function test_intervallo_date_filtra_calendario_lista_e_totale(): void
+    {
+        $componente = Livewire::actingAs(User::findOrFail(1))->test(Turni::class)
+            ->assertSet('da', '')
+            ->assertSet('a', '')
+            ->assertSee('Stato turno')
+            ->assertSee('filtro-dal')
+            ->assertSee('filtro-al')
+            ->assertSee('Tutti i clienti')
+            ->set('da', '2026-11-06')
+            ->set('a', '2026-11-06');
+
+        $this->assertSame([1, 2, 3, 4, 5], $componente->viewData('calendario')['turni']->flatten()->pluck('id')->sort()->values()->all());
+        $this->assertSame(15.0, $componente->viewData('totaleOreAgenda'));
+
+        $componente->set('vista', 'lista');
+        $this->assertSame([1, 2, 3, 4, 5], $this->idsLista($componente));
+        $this->assertSame(15.0, $componente->viewData('totaleOreAgenda'));
+
+        $componente->set('da', '')->set('a', '');
+        $this->assertSame([1, 2, 3, 4, 5, 6], $this->idsLista($componente));
+        $this->assertNull($componente->viewData('totaleOreAgenda'));
     }
 
     public function test_apri_e_chiudi_richiedono_nota_data_e_ora_e_registrano_la_timbratura_manuale(): void
