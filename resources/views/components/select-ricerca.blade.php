@@ -6,7 +6,7 @@
         q: '',
         opzioni: @js($options),
         valoreVuoto: @js($emptyValue),
-        get valore() { return {{ $draft ? "this.valori['{$model}']" : "\$wire['{$model}']" }} },
+        get valore() { return {{ $draft ? "this.valori['{$model}']" : "\$wire.\$get('{$model}')" }} },
         get etichetta() { return this.opzioni.find(o => String(o.id) === String(this.valore))?.label ?? '{{ $placeholder }}' },
         get filtrate() { return this.opzioni.filter(o => o.label.toLowerCase().includes(this.q.toLowerCase())) },
         stileMenu: {},
