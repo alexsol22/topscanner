@@ -59,7 +59,8 @@ class SidebarTest extends TestCase
             route('presenze'),
             route('presenze.clienti'),
             route('presenze.operatori'),
-            route('messaggi.modelli'),
+            route('messaggi.canale', ['canale' => 'sms']),
+            route('messaggi.canale', ['canale' => 'email']),
         ] as $url) {
             $risposta->assertSee('href="'.$url.'"', false);
         }
@@ -74,14 +75,15 @@ class SidebarTest extends TestCase
             ->assertSee('Agenda Pos')
             ->assertSee('Orari clienti')
             ->assertSee('Orari operatori')
-            ->assertSee('Modelli automatici')
-            ->assertDontSee('SMS inviati')
-            ->assertDontSee('Email inviate')
+            ->assertSee('Messaggi')
+            ->assertSee('SMS inviati')
+            ->assertSee('Email inviate')
             ->assertSee('WhatsApp inviati')
             ->assertSee('aria-disabled="true"', false)
             ->assertSee('Utenti')
             ->assertDontSee('Data Base');
         $risposta->assertDontSee('href="'.route('accessi').'"', false);
+        $risposta->assertDontSee('Canale messaggi');
         $risposta->assertDontSee('href="'.route('sedi').'"', false);
     }
 

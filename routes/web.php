@@ -65,8 +65,8 @@ Route::middleware('auth')->group(function () {
     Route::middleware('ruolo:super_admin,admin')->group(function () {
         Route::get('/clienti', Livewire\Clienti::class)->name('clienti');
         Route::get('/operatori', Livewire\Operatori::class)->name('operatori');
-        Route::get('/messaggi', Livewire\Messaggi::class)->name('messaggi');
-        Route::get('/messaggi/modelli', Livewire\ModelliMessaggio::class)->name('messaggi.modelli');
+        Route::get('/messaggi', Livewire\ModelliMessaggio::class)->name('messaggi');
+        Route::get('/messaggi/modelli', fn () => redirect()->route('messaggi'))->name('messaggi.modelli');
         Route::get('/messaggi/{canale}', Livewire\Messaggi::class)
             ->whereIn('canale', ['sms', 'email'])
             ->name('messaggi.canale');

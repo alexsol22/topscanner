@@ -8,7 +8,7 @@ use Livewire\Attributes\Title;
 use Livewire\Component;
 
 #[Layout('layouts::app')]
-#[Title('Modelli automatici')]
+#[Title('Messaggi')]
 class ModelliMessaggio extends Component
 {
     public bool $modal = false;

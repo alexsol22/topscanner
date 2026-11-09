@@ -46,8 +46,9 @@
             ['presenze.operatori', 'Orari operatori', 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1m0 0h6v-1a6 6 0 00-9-5.197', ['super_admin', 'admin'], []],
         ],
         'impostazioni-menu' => [
-            ['messaggi', 'Messaggi', 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z', ['super_admin', 'admin'], []],
-            ['messaggi.modelli', 'Modelli automatici', 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0120 9v10a2 2 0 01-2 2z', ['super_admin', 'admin'], []],
+            ['messaggi', 'Messaggi', 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A2 2 0 0120 9v10a2 2 0 01-2 2H7a2 2 0 01-2-2z', ['super_admin', 'admin'], []],
+            ['messaggi.canale', 'SMS inviati', 'M8 10h.01M12 10h.01M16 10h.01M9 16H5l-4 4V5a2 2 0 012-2h14a2 2 0 012 2v2', ['super_admin', 'admin'], ['canale' => 'sms']],
+            ['messaggi.canale', 'Email inviate', 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z', ['super_admin', 'admin'], ['canale' => 'email']],
             ['amministratori', 'Utenti', 'M16 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2m16 0v-2a4 4 0 00-3-3.87M12 7a4 4 0 11-8 0 4 4 0 018 0zm8 4a4 4 0 00-3-3.87', ['super_admin', 'admin'], []],
             ['whatsapp-inviati', 'WhatsApp inviati', 'M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z', ['super_admin', 'admin'], []],
         ],

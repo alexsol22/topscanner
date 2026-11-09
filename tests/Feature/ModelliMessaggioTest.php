@@ -69,6 +69,23 @@ class ModelliMessaggioTest extends TestCase
         $this->assertSame(2, (int) DB::table('tc_messaggi')->where('id', 2)->value('numero_email'));
     }
 
+    public function test_messaggi_page_shows_automatic_messages_without_a_channel_toggle(): void
+    {
+        $response = $this->actingAs(User::findOrFail(1))->get(route('messaggi'));
+
+        $response->assertOk()
+            ->assertSee('<title>Messaggi · Omnia Control</title>', false)
+            ->assertSee('Messaggi automatici')
+            ->assertDontSee('Canale messaggi');
+    }
+
+    public function test_legacy_automatic_messages_url_redirects_to_messaggi(): void
+    {
+        $response = $this->actingAs(User::findOrFail(1))->get(route('messaggi.modelli'));
+
+        $response->assertRedirectToRoute('messaggi');
+    }
+
     public function test_numero_invii_ammette_solo_1_2_3_e_mittente_massimo_11_caratteri(): void
     {
         Livewire::actingAs(User::findOrFail(1))->test(ModelliMessaggio::class)

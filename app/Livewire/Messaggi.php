@@ -22,8 +22,6 @@ class Messaggi extends Component
 
     public string $canale = 'sms';
 
-    public bool $canaleFissato = false;
-
     public string $filtroOperatore = '';
 
     public string $filtroDal = '';
@@ -42,19 +40,6 @@ class Messaggi extends Component
             abort_unless(in_array($canale, ['sms', 'email'], true), 404);
 
             $this->canale = $canale;
-            $this->canaleFissato = true;
-        }
-    }
-
-    public function selezionaCanale(string $canale): void
-    {
-        abort_unless(in_array($canale, ['sms', 'email', 'whatsapp'], true), 404);
-
-        $this->canale = $canale;
-        $this->resetPage();
-
-        if ($canale === 'email') {
-            Tracking::registra('Visualizzazione elenco email   ');
         }
     }
 

@@ -1,24 +1,5 @@
 <div class="space-y-5">
-    @if ($canaleFissato)
-        <h2 class="text-lg font-semibold text-slate-800">{{ $canale === 'sms' ? 'SMS inviati' : 'Email inviate' }}</h2>
-    @else
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <fieldset class="flex flex-wrap gap-2">
-                <legend class="sr-only">Canale messaggi</legend>
-                @foreach (['sms' => 'SMS', 'email' => 'Email'] as $valore => $etichetta)
-                    <button
-                        type="button"
-                        wire:click="selezionaCanale('{{ $valore }}')"
-                        aria-pressed="{{ $canale === $valore ? 'true' : 'false' }}"
-                        @class(['btn-primary' => $canale === $valore, 'btn-soft' => $canale !== $valore])
-                    >{{ $etichetta }}</button>
-                @endforeach
-                <button type="button" disabled aria-disabled="true" class="btn-soft cursor-not-allowed opacity-50">
-                    WhatsApp <span class="text-xs font-normal">(in arrivo)</span>
-                </button>
-            </fieldset>
-        </div>
-    @endif
+    <h2 class="text-lg font-semibold text-slate-800">{{ $canale === 'sms' ? 'SMS inviati' : 'Email inviate' }}</h2>
 
     @if (in_array($canale, ['sms', 'email'], true))
             <x-ui.filtri title="Filtri invii" :values="['filtroOperatore' => $filtroOperatore, 'filtroDal' => $filtroDal, 'filtroAl' => $filtroAl]">

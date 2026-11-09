@@ -1,13 +1,10 @@
 <div class="space-y-5">
-    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p class="text-sm text-slate-500">
-            Modelli per i messaggi automatici (avvisi turno, ritardi, scadenze e riconsegna materiale).
-            Segnaposto: <code class="rounded bg-sky-50 px-1">[OPERATORE] [SEDE] [DATA TURNO] [ORA TURNO] [INDIRIZZO]</code>
-        </p>
-        <a href="{{ route('messaggi') }}" wire:navigate class="btn-soft shrink-0">← Torna agli invii</a>
-    </div>
+    <p class="text-sm text-slate-500">
+        Messaggi automatici per avvisi turno, ritardi, scadenze e riconsegna materiale.
+        Segnaposto: <code class="rounded bg-sky-50 px-1">[OPERATORE] [SEDE] [DATA TURNO] [ORA TURNO] [INDIRIZZO]</code>
+    </p>
 
-    <section aria-label="Modelli automatici" class="card overflow-hidden">
+    <section aria-label="Messaggi automatici" class="card overflow-hidden">
         <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-sky-100">
                 <thead class="bg-sky-50/60">
