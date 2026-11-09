@@ -151,7 +151,7 @@ class Documenti extends Component
         $documenti = $this->applicaFiltriProprietario($this->query())
             ->when($this->filtroTipologia !== '', fn (Builder $query) => $query->where('tipologia', $this->filtroTipologia))
             ->when(trim($this->filtroDescrizione) !== '', fn (Builder $query) => $query->where('descrizione', 'like', '%'.trim($this->filtroDescrizione).'%'))
-            ->with(['cliente', 'operatore', 'certificato'])
+            ->with(['cliente', 'operatore', 'certificato', 'visualizzazione'])
             ->orderByRaw('scadenza is null')->orderBy('scadenza')->orderByDesc('id')
             ->paginate(12);
 

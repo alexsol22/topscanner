@@ -45,26 +45,52 @@
                     aperto: false,
                     ricerca: '',
                     opzioni: @js($suggerimentiSedi),
+                    stileMenu: {},
+                    altezzaLista: '15rem',
                     filtrati() {
                         const termine = this.ricerca.trim().toLocaleLowerCase('it');
                         return this.opzioni.filter(opzione => opzione.search.toLocaleLowerCase('it').includes(termine)).slice(0, 20);
+                    },
+                    apri() {
+                        this.aperto = !this.aperto;
+                        if (this.aperto) {
+                            this.$nextTick(() => {
+                                this.aggiornaPosizione();
+                                this.$refs.ricerca.focus();
+                            });
+                        }
+                    },
+                    aggiornaPosizione() {
+                        const rettangolo = this.$refs.selettore.getBoundingClientRect();
+                        const spazioSotto = window.innerHeight - rettangolo.bottom - 8;
+                        const spazioSopra = rettangolo.top - 8;
+                        const sopra = spazioSotto < 320 && spazioSopra > spazioSotto;
+                        const spazioDisponibile = sopra ? spazioSopra : spazioSotto;
+
+                        this.stileMenu = {
+                            left: `${rettangolo.left}px`,
+                            width: `${rettangolo.width}px`,
+                            top: sopra ? 'auto' : `${rettangolo.bottom + 4}px`,
+                            bottom: sopra ? `${window.innerHeight - rettangolo.top + 4}px` : 'auto',
+                        };
+                        this.altezzaLista = `${Math.max(48, Math.min(240, spazioDisponibile - 72))}px`;
                     },
                     seleziona(id) {
                         this.valori.filtroSede = id;
                         this.aperto = false;
                         this.ricerca = '';
                     }
-                }" @click.outside="aperto = false" @keydown.escape="if (aperto) { $event.stopPropagation(); aperto = false; }">
+                }" @click.outside="aperto = false" @keydown.escape="if (aperto) { $event.stopPropagation(); aperto = false; }" @scroll.window.capture="if (aperto) aggiornaPosizione()" @resize.window="if (aperto) aggiornaPosizione()">
                     <label class="label" for="filtro-sede">Sede</label>
-                    <button id="filtro-sede" type="button" role="combobox" aria-controls="suggerimenti-sedi" :aria-expanded="aperto" @click="aperto = !aperto; if (aperto) $nextTick(() => $refs.ricerca.focus())" class="input flex items-center justify-between text-left">
+                    <button id="filtro-sede" x-ref="selettore" type="button" role="combobox" aria-controls="suggerimenti-sedi" :aria-expanded="aperto" @click="apri()" class="input flex items-center justify-between text-left">
                         <span x-text="opzioni.find(opzione => String(opzione.id) === String(valori.filtroSede))?.label ?? 'Tutte le sedi'"></span>
                         <span aria-hidden="true" class="text-slate-400">⌄</span>
                     </button>
-                    <div x-cloak x-show="aperto" class="absolute inset-x-0 top-full z-30 mt-1 overflow-hidden rounded-xl border border-sky-100 bg-white shadow-lg">
+                    <div x-cloak x-show="aperto" x-bind:style="stileMenu" class="fixed z-[60] min-w-48 overflow-hidden rounded-xl border border-sky-100 bg-white shadow-lg">
                         <div class="border-b border-sky-100 p-2">
                             <input x-ref="ricerca" x-model="ricerca" type="search" aria-label="Cerca una sede" placeholder="Digita per cercare…" @keydown.enter.prevent="const opzione = filtrati()[0]; if (opzione) seleziona(opzione.id)" class="input">
                         </div>
-                        <ul id="suggerimenti-sedi" role="listbox" class="max-h-60 overflow-y-auto p-1">
+                        <ul id="suggerimenti-sedi" x-bind:style="`max-height: ${altezzaLista}`" role="listbox" class="overflow-y-auto p-1">
                             <li role="option">
                                 <button type="button" @click="valori.filtroSede = null; aperto = false; ricerca = ''" class="block w-full rounded-lg px-3 py-2 text-left text-sm text-slate-500 hover:bg-sky-50">Tutte le sedi</button>
                             </li>
@@ -84,26 +110,52 @@
                     aperto: false,
                     ricerca: '',
                     opzioni: @js($suggerimentiOperatori),
+                    stileMenu: {},
+                    altezzaLista: '15rem',
                     filtrati() {
                         const termine = this.ricerca.trim().toLocaleLowerCase('it');
                         return this.opzioni.filter(opzione => opzione.search.toLocaleLowerCase('it').includes(termine)).slice(0, 20);
+                    },
+                    apri() {
+                        this.aperto = !this.aperto;
+                        if (this.aperto) {
+                            this.$nextTick(() => {
+                                this.aggiornaPosizione();
+                                this.$refs.ricerca.focus();
+                            });
+                        }
+                    },
+                    aggiornaPosizione() {
+                        const rettangolo = this.$refs.selettore.getBoundingClientRect();
+                        const spazioSotto = window.innerHeight - rettangolo.bottom - 8;
+                        const spazioSopra = rettangolo.top - 8;
+                        const sopra = spazioSotto < 320 && spazioSopra > spazioSotto;
+                        const spazioDisponibile = sopra ? spazioSopra : spazioSotto;
+
+                        this.stileMenu = {
+                            left: `${rettangolo.left}px`,
+                            width: `${rettangolo.width}px`,
+                            top: sopra ? 'auto' : `${rettangolo.bottom + 4}px`,
+                            bottom: sopra ? `${window.innerHeight - rettangolo.top + 4}px` : 'auto',
+                        };
+                        this.altezzaLista = `${Math.max(48, Math.min(240, spazioDisponibile - 72))}px`;
                     },
                     seleziona(id) {
                         this.valori.filtroOperatore = id;
                         this.aperto = false;
                         this.ricerca = '';
                     }
-                }" @click.outside="aperto = false" @keydown.escape="if (aperto) { $event.stopPropagation(); aperto = false; }">
+                }" @click.outside="aperto = false" @keydown.escape="if (aperto) { $event.stopPropagation(); aperto = false; }" @scroll.window.capture="if (aperto) aggiornaPosizione()" @resize.window="if (aperto) aggiornaPosizione()">
                     <label class="label" for="filtro-operatore">Operatore</label>
-                    <button id="filtro-operatore" type="button" role="combobox" aria-controls="suggerimenti-operatori" :aria-expanded="aperto" @click="aperto = !aperto; if (aperto) $nextTick(() => $refs.ricerca.focus())" class="input flex items-center justify-between text-left">
+                    <button id="filtro-operatore" x-ref="selettore" type="button" role="combobox" aria-controls="suggerimenti-operatori" :aria-expanded="aperto" @click="apri()" class="input flex items-center justify-between text-left">
                         <span x-text="opzioni.find(opzione => String(opzione.id) === String(valori.filtroOperatore))?.label ?? 'Tutti gli operatori'"></span>
                         <span aria-hidden="true" class="text-slate-400">⌄</span>
                     </button>
-                    <div x-cloak x-show="aperto" class="absolute inset-x-0 top-full z-30 mt-1 overflow-hidden rounded-xl border border-sky-100 bg-white shadow-lg">
+                    <div x-cloak x-show="aperto" x-bind:style="stileMenu" class="fixed z-[60] min-w-48 overflow-hidden rounded-xl border border-sky-100 bg-white shadow-lg">
                         <div class="border-b border-sky-100 p-2">
                             <input x-ref="ricerca" x-model="ricerca" type="search" aria-label="Cerca un operatore" placeholder="Digita per cercare…" @keydown.enter.prevent="const opzione = filtrati()[0]; if (opzione) seleziona(opzione.id)" class="input">
                         </div>
-                        <ul id="suggerimenti-operatori" role="listbox" class="max-h-60 overflow-y-auto p-1">
+                        <ul id="suggerimenti-operatori" x-bind:style="`max-height: ${altezzaLista}`" role="listbox" class="overflow-y-auto p-1">
                             <li role="option">
                                 <button type="button" @click="valori.filtroOperatore = null; aperto = false; ricerca = ''" class="block w-full rounded-lg px-3 py-2 text-left text-sm text-slate-500 hover:bg-sky-50">Tutti gli operatori</button>
                             </li>

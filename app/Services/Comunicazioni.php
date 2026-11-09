@@ -17,7 +17,14 @@ use Throwable;
 /** Invio email automatiche: porting di MyEmailsNative / MyUtils::getTextMessage (Yii). */
 class Comunicazioni
 {
+    private ?string $destinatarioProva = null;
+
     public function __construct(private ?Sms $sms = null) {}
+
+    public function attivaProva(string $destinatario): void
+    {
+        $this->destinatarioProva = $destinatario;
+    }
 
     /** @param  array<string, mixed>  $dati */
     public function testo(?string $modello, array $dati): string
@@ -74,6 +81,12 @@ class Comunicazioni
      */
     public function invia(array $destinatari, string $oggetto, string $messaggio, int $idOperatore = 0): int
     {
+        if ($this->destinatarioProva !== null) {
+            Mail::to($this->destinatarioProva)->send(new NotificaHtml('[PROVA] '.$oggetto, $messaggio));
+
+            return 1;
+        }
+
         $html = NotificaHtml::renderizza($oggetto, $messaggio);
         $inviate = 0;
 
@@ -106,7 +119,7 @@ class Comunicazioni
      */
     public function inviaSms(Messaggio $config, array $dati, ?string $cellulare, int $idOperatore): void
     {
-        if (! $config->invia_sms || ! $cellulare) {
+        if ($this->destinatarioProva !== null || ! $config->invia_sms || ! $cellulare) {
             return;
         }
 

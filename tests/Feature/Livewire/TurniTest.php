@@ -84,6 +84,9 @@ class TurniTest extends TestCase
 
         $componente
             ->assertSee('wire:click="$set(\'filtroStato\', \'completato\')"', false)
+            ->assertSee('class="fixed z-[60]', false)
+            ->assertSee('id="suggerimenti-sedi"', false)
+            ->assertSee('id="suggerimenti-operatori"', false)
             ->set('filtroStato', 'completato')
             ->assertSet('filtroStato', 'completato')
             ->assertSee('wire:click="$set(\'filtroStato\', \'\')"', false)

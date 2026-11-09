@@ -31,6 +31,7 @@
                         <th class="th">Operatore</th>
                         <th class="th">Tipologia</th>
                         <th class="th">Descrizione</th>
+                        <th class="th">Visto</th>
                         <th class="th">Scadenza</th>
                         <th class="th">Azioni</th>
                     </tr>
@@ -42,6 +43,20 @@
                             <td class="td">{{ $d->tipo === 'O' ? $d->operatore?->nome_completo : '—' }}</td>
                             <td class="td">{{ $d->certificato?->nome ?? '—' }}</td>
                             <td class="td max-w-sm whitespace-normal font-medium text-slate-800">{{ $d->descrizione }}</td>
+                            <td class="td whitespace-nowrap">
+                                @if ($d->tipo === 'O')
+                                    @if ($d->visualizzazione?->visto)
+                                        <span class="font-medium text-emerald-700">Visto</span>
+                                        @if ($d->visualizzazione->data_vista)
+                                            <span class="text-slate-500">il {{ $d->visualizzazione->data_vista->format('d-m-Y H:i') }}</span>
+                                        @endif
+                                    @else
+                                        <span class="text-slate-500">Non visto</span>
+                                    @endif
+                                @else
+                                    —
+                                @endif
+                            </td>
                             <td class="td whitespace-nowrap">
                                 @if ($d->scadenza)
                                     <span class="rounded-full px-2.5 py-1 text-xs font-semibold {{ $d->scadenza->isPast() ? 'bg-rose-100 text-rose-700' : ($d->inScadenza() ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700') }}">{{ $d->scadenza->format('d/m/Y') }}</span>
@@ -55,7 +70,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="6" class="td py-10 text-center text-slate-500">Nessun documento disponibile.</td>
+                            <td colspan="7" class="td py-10 text-center text-slate-500">Nessun documento disponibile.</td>
                         </tr>
                     @endforelse
                 </tbody>

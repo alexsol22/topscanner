@@ -7,20 +7,46 @@ use App\Models\Legacy\Admin;
 use App\Models\Legacy\Cliente;
 use App\Models\Legacy\Turno;
 use App\Services\Comunicazioni;
+use App\Services\ProvaNotifiche;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 
 class InviaProgrammazione extends Command
 {
-    protected $signature = 'notifiche:programmazione';
+    protected $signature = 'notifiche:programmazione {--prova-sicura : Limita la prova all’operatore autorizzato, senza SMS né modifiche}';
 
     protected $description = 'Invia agli admin il riepilogo ore richieste/programmate per cliente e sede nei prossimi 7 giorni';
 
     private const COLONNE_GIORNO = ['dom', 'lun', 'mar', 'mer', 'gio', 'ven', 'sab'];
 
-    public function handle(Comunicazioni $comunicazioni): int
+    public function handle(Comunicazioni $comunicazioni, ProvaNotifiche $prova): int
     {
         $giorni = collect(range(0, 6))->map(fn (int $n) => today()->addDays($n));
+
+        if ($this->option('prova-sicura')) {
+            $idProva = $prova->attiva($comunicazioni);
+            $turni = Turno::query()
+                ->where('id_operatore', $idProva)
+                ->whereBetween('data_inizio', [$giorni->first()->toDateString(), $giorni->last()->toDateString()])
+                ->orderBy('data_inizio')
+                ->orderBy('ora_inizio')
+                ->get();
+            $corpo = '<p>Programmazione dei soli turni dell’operatore di prova.</p>';
+
+            foreach ($turni as $turno) {
+                $corpo .= '<p>'.e($turno->data_inizio->format('d-m-Y')).' '.e($turno->ora_inizio).' - '.e($turno->ora_fine).'</p>';
+            }
+
+            if ($turni->isEmpty()) {
+                $corpo .= '<p>Nessun turno nei prossimi 7 giorni.</p>';
+            }
+
+            $oggetto = 'Programmazione '.$giorni->first()->format('d-m-Y').' - '.$giorni->last()->format('d-m-Y');
+            $comunicazioni->invia([ProvaNotifiche::EMAIL => 'Prova'], $oggetto, $corpo, $idProva);
+            $this->info('Programmazione di prova inviata a 1 destinatario');
+
+            return self::SUCCESS;
+        }
 
         $ore = Turno::query()
             ->whereBetween('data_inizio', [$giorni->first()->toDateString(), $giorni->last()->toDateString()])

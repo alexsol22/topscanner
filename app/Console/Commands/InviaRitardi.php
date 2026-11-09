@@ -7,40 +7,50 @@ use App\Models\Legacy\Messaggio;
 use App\Models\Legacy\Ritardo;
 use App\Models\Legacy\SendEmail;
 use App\Services\Comunicazioni;
+use App\Services\ProvaNotifiche;
 use Illuminate\Console\Command;
 
 class InviaRitardi extends Command
 {
-    protected $signature = 'notifiche:ritardi';
+    protected $signature = 'notifiche:ritardi {--prova-sicura : Limita la prova all’operatore autorizzato, senza SMS né modifiche}';
 
     protected $description = 'Invia le email di ritardo timbratura inizio/fine turno (modelli 2 e 3) e le comunicazioni turni in coda';
 
-    public function handle(Comunicazioni $comunicazioni): int
+    public function handle(Comunicazioni $comunicazioni, ProvaNotifiche $prova): int
     {
+        $idProva = $this->option('prova-sicura') ? $prova->attiva($comunicazioni) : null;
         // Come in Yii, a mezzanotte non si elabora nulla
         if (now()->hour === 0) {
             return self::SUCCESS;
         }
 
-        $this->inviaComunicazioniInCoda($comunicazioni);
+        $this->inviaComunicazioniInCoda($comunicazioni, $idProva);
 
-        $this->info('Ritardi inizio turno: '.$this->elaboraRitardi($comunicazioni, Messaggio::find(2), 'I'));
-        $this->info('Ritardi fine turno: '.$this->elaboraRitardi($comunicazioni, Messaggio::find(3), 'F'));
+        $this->info('Ritardi inizio turno: '.$this->elaboraRitardi($comunicazioni, Messaggio::find(2), 'I', $idProva));
+        $this->info('Ritardi fine turno: '.$this->elaboraRitardi($comunicazioni, Messaggio::find(3), 'F', $idProva));
 
         return self::SUCCESS;
     }
 
-    private function inviaComunicazioniInCoda(Comunicazioni $comunicazioni): void
+    private function inviaComunicazioniInCoda(Comunicazioni $comunicazioni, ?int $idProva): void
     {
-        foreach (SendEmail::where('sent', 'N')->get() as $coda) {
+        $codaQuery = SendEmail::where('sent', 'N');
+
+        if ($idProva !== null) {
+            $codaQuery->where('id_operatore', $idProva)->whereRaw('LOWER(email) = ?', [ProvaNotifiche::EMAIL]);
+        }
+
+        foreach ($codaQuery->get() as $coda) {
             $comunicazioni->invia([$coda->email => (string) $coda->nome], 'Comunicazione turni', (string) $coda->testo, (int) $coda->id_operatore);
 
-            $coda->update(['sent' => 'Y', 'data_sent' => now()]);
+            if ($idProva === null) {
+                $coda->update(['sent' => 'Y', 'data_sent' => now()]);
+            }
         }
     }
 
     /** Ritardo timbratura: $tipo 'I' = inizio turno, 'F' = fine turno. */
-    private function elaboraRitardi(Comunicazioni $comunicazioni, ?Messaggio $config, string $tipo): int
+    private function elaboraRitardi(Comunicazioni $comunicazioni, ?Messaggio $config, string $tipo, ?int $idProva): int
     {
         if (! $config) {
             return 0;
@@ -54,7 +64,9 @@ class InviaRitardi extends Command
         $giorno = today()->addDays((int) $config->giorni);
         $ora = now()->addDays((int) $config->giorni)->subMinutes((int) $config->minuti)->format('H:i');
 
-        $turni = $comunicazioni->turni()->whereDate($campoData, $giorno)->where($campoOra, '<', $ora)->get();
+        $turni = $comunicazioni->turni()
+            ->when($idProva !== null, fn ($query) => $query->where('t.id_operatore', $idProva))
+            ->whereDate($campoData, $giorno)->where($campoOra, '<', $ora)->get();
         $notificati = 0;
 
         foreach ($turni as $turno) {
@@ -71,7 +83,9 @@ class InviaRitardi extends Command
             $ritardo ??= new Ritardo(['id_turno' => $turno->id, 'id_operatore' => $turno->id_operatore, 'inizio' => 0, 'fine' => 0]);
             $ritardo->{$colonna} = (int) $ritardo->{$colonna} + 1;
             $ritardo->{"data_ritardo_{$colonna}"} = now();
-            $ritardo->save();
+            if ($idProva === null) {
+                $ritardo->save();
+            }
 
             $notificati++;
 

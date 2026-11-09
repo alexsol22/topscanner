@@ -4,16 +4,18 @@ namespace App\Console\Commands;
 
 use App\Models\Legacy\Messaggio;
 use App\Services\Comunicazioni;
+use App\Services\ProvaNotifiche;
 use Illuminate\Console\Command;
 
 class InviaAvvisoTurni extends Command
 {
-    protected $signature = 'notifiche:avviso-turni';
+    protected $signature = 'notifiche:avviso-turni {--prova-sicura : Limita la prova all’operatore autorizzato, senza SMS né modifiche}';
 
     protected $description = 'Invia agli operatori l\'email di promemoria per i turni in partenza (modello messaggio 1)';
 
-    public function handle(Comunicazioni $comunicazioni): int
+    public function handle(Comunicazioni $comunicazioni, ProvaNotifiche $prova): int
     {
+        $idProva = $this->option('prova-sicura') ? $prova->attiva($comunicazioni) : null;
         $config = Messaggio::find(1);
 
         if (! $config) {
@@ -24,6 +26,7 @@ class InviaAvvisoTurni extends Command
         $ora = now()->startOfHour()->addDays((int) $config->giorni)->addHours((int) $config->ore)->format('H:i');
 
         $turni = $comunicazioni->turni()
+            ->when($idProva !== null, fn ($query) => $query->where('t.id_operatore', $idProva))
             ->whereDate('t.data_inizio', $giorno)
             ->where('t.ora_inizio', $ora)
             ->get();

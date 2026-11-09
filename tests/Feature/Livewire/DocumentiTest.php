@@ -51,9 +51,16 @@ class DocumentiTest extends TestCase
 
         $this->createDocument($clientId, 'C', $certificateId, 'Certificato cliente alpha');
         $this->createDocument($otherClientId, 'C', $certificateId, 'Certificato cliente beta');
-        $this->createDocument($operatorId, 'O', $certificateId, 'Certificato operatore alpha');
+        $documentoVistoId = $this->createDocument($operatorId, 'O', $certificateId, 'Certificato operatore alpha');
+        $this->createDocument($operatorId, 'O', $certificateId, 'Certificato operatore da leggere');
         $this->createDocument($clientId, 'C', $otherCertificateId, 'Certificato privacy cliente alpha');
         $this->createDocument($operatorId, 'O', $certificateId, 'Visita medica operatore alpha');
+        $connection->table('tc_documenti_view')->insert([
+            'id_documento' => $documentoVistoId,
+            'id_operatore' => $operatorId,
+            'visto' => 'Y',
+            'data_vista' => '2026-11-09 09:30:00',
+        ]);
 
         Livewire::test(Documenti::class)
             ->set('filtroCliente', (string) $clientId)
@@ -62,6 +69,9 @@ class DocumentiTest extends TestCase
             ->set('filtroDescrizione', 'Certificato')
             ->assertSee('Certificato cliente alpha')
             ->assertSee('Certificato operatore alpha')
+            ->assertSee('il 09-11-2026 09:30')
+            ->assertSee('Non visto')
+            ->assertSee('Visto')
             ->assertDontSee('Certificato cliente beta')
             ->assertDontSee('Certificato privacy cliente alpha')
             ->assertDontSee('Visita medica operatore alpha');
@@ -162,11 +172,19 @@ class DocumentiTest extends TestCase
             $table->string('admin');
             $table->string('formazione');
         });
+
+        Schema::connection('mysql')->create('tc_documenti_view', function (Blueprint $table): void {
+            $table->increments('id');
+            $table->unsignedInteger('id_documento');
+            $table->unsignedInteger('id_operatore');
+            $table->string('visto')->nullable();
+            $table->dateTime('data_vista')->nullable();
+        });
     }
 
-    private function createDocument(int $ownerId, string $ownerType, int $certificateId, string $description): void
+    private function createDocument(int $ownerId, string $ownerType, int $certificateId, string $description): int
     {
-        DB::connection('mysql')->table('tc_documenti')->insert([
+        return DB::connection('mysql')->table('tc_documenti')->insertGetId([
             'id_tipo' => $ownerId,
             'tipo' => $ownerType,
             'tipologia' => $certificateId,
