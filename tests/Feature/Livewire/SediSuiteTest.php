@@ -2,11 +2,13 @@
 
 namespace Tests\Feature\Livewire;
 
+use App\Livewire\GeneratoreQr;
 use App\Livewire\SedeForm;
 use App\Livewire\Sedi;
 use App\Models\User;
 use App\Services\QrSede;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
@@ -197,6 +199,56 @@ class SediSuiteTest extends TestCase
         Storage::disk($this->disco)->delete($percorsoPostazione);
         $this->actingAs($this->admin())->get(route('sedi.qrcode', $sede['sede']))->assertNotFound();
         $this->actingAs($this->admin())->get(route('postazioni.qrcode', $sede['postazione']))->assertNotFound();
+    }
+
+    public function test_qr_generator_shows_image_status_and_recreates_a_missing_associated_image(): void
+    {
+        $this->markTestSkipped('Generatore QR temporaneamente disattivato.');
+
+        $staff = $this->admin();
+        $cliente = $this->cliente();
+        $sede = $this->sedeCompleta($cliente);
+        $codiceSede = DB::table('tc_codici')->find($sede['codiceSede']);
+        $percorsoSede = app(QrSede::class)->percorso($codiceSede->codice);
+        $percorsoPostazione = app(QrSede::class)->percorso('ITALPOL*P'.$sede['postazione']);
+        Storage::disk($this->disco)->put($percorsoPostazione, 'immagine già presente');
+
+        $this->actingAs($staff)->get(route('generatore-qr'))
+            ->assertOk()
+            ->assertSee('QR code associati')
+            ->assertSee($codiceSede->codice)
+            ->assertSee('Sede: Sede Uno')
+            ->assertSee('Mancante')
+            ->assertSee('Presente')
+            ->assertSee('Modifica')
+            ->assertSee('Seleziona un codice dalla lista');
+
+        Livewire::actingAs($staff)->test(GeneratoreQr::class)
+            ->call('selezionaCodice', $codiceSede->id)
+            ->assertSee('Modifica immagine QR')
+            ->assertSee($codiceSede->codice)
+            ->set('colore', '#ff0000')
+            ->set('logo', UploadedFile::fake()->image('logo.png', 32, 32))
+            ->call('salvaImmagine')
+            ->assertHasNoErrors()
+            ->assertSee("Immagine QR aggiornata per {$codiceSede->codice}.");
+
+        Storage::disk($this->disco)->assertExists($percorsoSede);
+        $this->assertSame("\x89PNG\r\n\x1a\n", substr(Storage::disk($this->disco)->get($percorsoSede), 0, 8));
+        $this->assertSame('immagine già presente', Storage::disk($this->disco)->get($percorsoPostazione));
+        $this->assertSame($codiceSede->codice, DB::table('tc_codici')->where('id', $codiceSede->id)->value('codice'));
+        $this->assertSame('A', DB::table('tc_codici')->where('id', $codiceSede->id)->value('stato'));
+
+        $this->actingAs($staff)->get(route('codici.qrcode', $codiceSede->id))
+            ->assertOk()
+            ->assertDownload(basename($percorsoSede));
+    }
+
+    public function test_qr_generator_is_not_available_to_non_staff_users(): void
+    {
+        $this->markTestSkipped('Generatore QR temporaneamente disattivato.');
+
+        $this->actingAs($this->utente(4, 901))->get(route('generatore-qr'))->assertForbidden();
     }
 
     public function test_generating_a_qr_does_not_replace_an_existing_file(): void

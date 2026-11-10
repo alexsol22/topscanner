@@ -38,6 +38,11 @@ Route::middleware('auth')->group(function () {
     Route::get('/bacheca', Livewire\Bacheca::class)->name('bacheca');
     Route::get('/documenti', Livewire\Documenti::class)->name('documenti');
     Route::get('/documenti/{documento}/scarica', [DownloadController::class, 'documento'])->name('documenti.scarica');
+    Route::get('/collaudo-manuale', function () {
+        abort_unless(auth()->user()->email === 'alessiosolari22@gmail.com', 403);
+
+        return response()->view('collaudo-manuale');
+    })->name('collaudo-manuale');
 
     Route::middleware('ruolo:operatore')->group(function () {
         Route::get('/scansione', Livewire\Scansione::class)->name('scansione');
@@ -66,6 +71,9 @@ Route::middleware('auth')->group(function () {
         Route::get('/clienti', Livewire\Clienti::class)->name('clienti');
         Route::get('/operatori', Livewire\Operatori::class)->name('operatori');
         Route::get('/messaggi', Livewire\ModelliMessaggio::class)->name('messaggi');
+        // Generatore QR temporaneamente disattivato
+        // Route::get('/generatore-qr', Livewire\GeneratoreQr::class)->name('generatore-qr');
+        // Route::get('/codici/{codice}/qrcode', [DownloadController::class, 'qrCodice'])->name('codici.qrcode');
         Route::get('/messaggi/modelli', fn () => redirect()->route('messaggi'))->name('messaggi.modelli');
         Route::get('/messaggi/{canale}', Livewire\Messaggi::class)
             ->whereIn('canale', ['sms', 'email'])

@@ -51,6 +51,7 @@
             ['messaggi.canale', 'Email inviate', 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z', ['super_admin', 'admin'], ['canale' => 'email']],
             ['amministratori', 'Utenti', 'M16 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2m16 0v-2a4 4 0 00-3-3.87M12 7a4 4 0 11-8 0 4 4 0 018 0zm8 4a4 4 0 00-3-3.87', ['super_admin', 'admin'], []],
             ['whatsapp-inviati', 'WhatsApp inviati', 'M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z', ['super_admin', 'admin'], []],
+            // ['generatore-qr', 'Generatore QR', 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM19 14h2v7h-7v-2', ['super_admin', 'admin'], []],
         ],
     ];
     $vociDisabilitate = ['whatsapp-inviati'];

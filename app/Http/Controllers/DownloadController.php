@@ -82,6 +82,13 @@ class DownloadController extends Controller
         return $this->scaricaQr($postazione->codice, $qr);
     }
 
+    public function qrCodice(Codice $codice, QrSede $qr)
+    {
+        abort_unless(auth()->user()->isStaff(), 403);
+
+        return $this->scaricaQr($codice, $qr);
+    }
+
     private function scaricaQr(?Codice $codice, QrSede $qr)
     {
         abort_unless($codice, 404, 'Nessun QR associato.');

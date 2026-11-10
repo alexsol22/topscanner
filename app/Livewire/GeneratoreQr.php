@@ -2,8 +2,12 @@
 
 namespace App\Livewire;
 
-use App\Livewire\Concerns\ConAccesso;
-use App\Services\QrAziendale as Generatore;
+use App\Models\Legacy\Codice;
+use App\Models\User;
+use App\Services\QrAziendale;
+use App\Services\QrSede;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
@@ -13,79 +17,79 @@ use Livewire\WithFileUploads;
 #[Title('Generatore QR')]
 class GeneratoreQr extends Component
 {
-    use ConAccesso, WithFileUploads;
+    use WithFileUploads;
 
-    public string $contenuto = '';
+    public ?int $codiceId = null;
 
-    public string $titolo = 'Omnia Control';
-
-    public string $colore = '#0369a1';
+    public string $colore = '#000000';
 
     public $logo;
 
-    public ?int $clienteId = null;
-
-    public ?int $sedeId = null;
-
-    /** Quando è incorporato nella pagina Sedi il QR è legato a una sede e non si può cambiare. */
-    public bool $bloccato = false;
-
-    public function mount(?int $sede = null): void
+    public function mount(): void
     {
-        abort_unless(auth()->user()->isStaff(), 403);
-
-        if ($sede) {
-            $s = $this->sediVisibili()->with('codice')->findOrFail($sede);
-            $this->bloccato = true;
-            $this->clienteId = $s->id_cliente;
-            $this->sedeId = $s->id;
-            $this->contenuto = $s->codice?->codice ?? '';
-            $this->titolo = mb_substr($s->descrizione, 0, 40);
-        }
+        $this->autorizzaStaff();
     }
 
-    public function updatedClienteId(): void
+    public function selezionaCodice(int $codiceId): void
     {
-        abort_if($this->bloccato, 403);
-        $this->sedeId = null;
-        $this->contenuto = '';
-    }
+        $this->autorizzaStaff();
+        Codice::query()->findOrFail($codiceId);
 
-    public function updatedSedeId(): void
-    {
-        abort_if($this->bloccato, 403);
-        $sede = $this->sedeSelezionata();
-        $this->contenuto = $sede?->codice?->codice ?? '';
-
-        if ($sede) {
-            $this->titolo = $sede->descrizione;
-        }
-    }
-
-    public function rimuoviLogo(): void
-    {
+        $this->codiceId = $codiceId;
+        $this->colore = '#000000';
         $this->logo = null;
+        $this->resetValidation();
     }
 
-    private function sedeSelezionata()
+    public function salvaImmagine(QrSede $qr): void
     {
-        return $this->sedeId ? $this->sediVisibili()->with('codice')->find($this->sedeId) : null;
-    }
-
-    public function render(Generatore $gen)
-    {
-        $this->validate([
-            'titolo' => 'nullable|string|max:40',
+        $this->autorizzaStaff();
+        $dati = $this->validate([
+            'codiceId' => ['required', 'integer', 'exists:tc_codici,id'],
             'colore' => ['required', 'regex:/^#[0-9a-fA-F]{6}$/'],
-            'logo' => 'nullable|image|mimes:png,jpg,jpeg,webp|max:2048',
+            'logo' => ['nullable', 'image', 'mimes:png,jpg,jpeg,webp', 'max:2048'],
         ]);
+        $codice = Codice::query()->findOrFail($dati['codiceId']);
+        $contenutoLogo = $this->logo?->get();
 
-        $logoUri = $this->logo ? 'data:'.$this->logo->getMimeType().';base64,'.base64_encode($this->logo->get()) : null;
+        $qr->generaPersonalizzato($codice->codice, $dati['colore'], $contenutoLogo);
+
+        session()->flash('qr', "Immagine QR aggiornata per {$codice->codice}. Il codice e l'associazione non sono stati modificati.");
+    }
+
+    public function render(QrSede $qr, QrAziendale $generatore)
+    {
+        $this->autorizzaStaff();
+        $disco = Storage::disk(config('filesystems.files_disk'));
+        $codici = Codice::query()
+            ->whereNotNull('codice')
+            ->where('codice', '!=', '')
+            ->with(['sede', 'postazione'])
+            ->orderBy('codice')
+            ->get()
+            ->map(fn (Codice $codice): array => [
+                'modello' => $codice,
+                'immaginePresente' => $disco->exists($qr->percorso($codice->codice)),
+            ]);
+
+        $selezionato = $this->codiceId ? $codici->firstWhere('modello.id', $this->codiceId) : null;
+        $logoDataUri = $this->logo
+            ? 'data:'.$this->logo->getMimeType().';base64,'.base64_encode($this->logo->get())
+            : null;
 
         return view('livewire.generatore-qr', [
-            'svg' => $gen->svg($this->contenuto !== '' ? $this->contenuto : ($this->titolo ?: 'Omnia Control'), $this->titolo, $logoUri, $this->colore),
-            'clienti' => $this->clientiVisibili()->orderBy('ragione_sociale')->get(['id', 'ragione_sociale']),
-            'sedi' => $this->clienteId ? $this->sediVisibili()->where('id_cliente', $this->clienteId)->orderBy('descrizione')->get(['id', 'descrizione']) : collect(),
+            'codici' => $codici,
+            'selezionato' => $selezionato,
+            'svg' => $selezionato
+                ? $generatore->svg($selezionato['modello']->codice, '', $logoDataUri, $this->colore)
+                : null,
         ]);
+    }
+
+    private function autorizzaStaff(): void
+    {
+        $user = Auth::user();
+
+        abort_unless($user instanceof User && $user->isStaff(), 403);
     }
 }
