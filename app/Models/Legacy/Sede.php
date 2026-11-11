@@ -5,6 +5,7 @@ namespace App\Models\Legacy;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Storage;
 
 class Sede extends LegacyModel
 {
@@ -65,6 +66,32 @@ class Sede extends LegacyModel
     public function percorsoFoto(): ?string
     {
         return $this->foto ? $this->cartella().'/'.basename($this->foto) : null;
+    }
+
+    /** Come getImageSede: il file indicato sulla sede, altrimenti quello della prima postazione. */
+    public function percorsoImmagineTimbratura(): ?string
+    {
+        $disco = Storage::disk(config('filesystems.files_disk'));
+
+        if (filled($this->foto)) {
+            $percorso = $this->percorsoFoto();
+
+            return $percorso && $disco->exists($percorso) ? $percorso : null;
+        }
+
+        $postazione = $this->postazioni()
+            ->whereNotNull('file')
+            ->where('file', '!=', '')
+            ->orderBy('id')
+            ->first();
+        $percorso = $postazione?->percorsoFile();
+
+        return $percorso && $disco->exists($percorso) ? $percorso : null;
+    }
+
+    public function haImmagineTimbratura(): bool
+    {
+        return $this->percorsoImmagineTimbratura() !== null;
     }
 
     protected function citta(): Attribute

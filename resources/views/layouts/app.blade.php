@@ -61,6 +61,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <x-ui.pwa />
     <link rel="icon" type="image/svg+xml" href="{{ asset('brand/omnia-control.svg') }}?v=2">
     <x-ui.tema-script />
     <title>{{ $titoloPagina }} · Omnia Control</title>

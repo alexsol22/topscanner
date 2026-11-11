@@ -74,6 +74,27 @@ class TurniTest extends TestCase
         });
     }
 
+    public function test_operatore_vede_il_collegamento_per_sostituire_il_turno(): void
+    {
+        DB::table('tc_admin')->insert([
+            'id' => 1, 'user_type' => 4, 'attivo' => 'Y', 'nome' => 'Mario', 'cognome' => 'Rossi',
+        ]);
+
+        Livewire::actingAs(User::findOrFail(1))->test(Turni::class)
+            ->assertSee('Sostituisci turno')
+            ->assertSee('sostituzione=1', false);
+    }
+
+    public function test_staff_non_vede_il_collegamento_per_sostituire_il_turno(): void
+    {
+        DB::table('tc_admin')->insert([
+            'id' => 1, 'user_type' => 2, 'attivo' => 'Y', 'nome' => 'Admin', 'cognome' => 'Test',
+        ]);
+
+        Livewire::actingAs(User::findOrFail(1))->test(Turni::class)
+            ->assertDontSee('Sostituisci turno');
+    }
+
     public function test_calendar_status_filter_can_be_selected_and_cleared(): void
     {
         DB::table('tc_admin')->insert([
@@ -260,5 +281,80 @@ class TurniTest extends TestCase
         $componente->call('chiudiDettaglioTurno')
             ->set('vista', 'calendario')
             ->assertSee('Visualizza timbrature turno delle 08:00 presso Sede Test');
+    }
+
+    public function test_con_sede_selezionata_mostra_ore_programmate_contro_richieste(): void
+    {
+        $this->travelTo(now()->setDate(2026, 11, 9)->setTime(12, 0));
+        $this->aggiungiOreRichieste();
+        DB::table('tc_admin')->insert([
+            'id' => 1, 'user_type' => 2, 'attivo' => 'Y', 'nome' => 'Admin', 'cognome' => 'Test',
+        ]);
+        DB::table('tc_clienti')->insert([
+            ['id' => 1, 'ragione_sociale' => 'AREA 1', 'isTest' => 0],
+            ['id' => 2, 'ragione_sociale' => 'AREA 2', 'isTest' => 0],
+        ]);
+        DB::table('tc_sedi')->insert([
+            ['id' => 1, 'id_cliente' => 1, 'descrizione' => 'Sede Nord', 'lun' => 8, 'mar' => 0, 'mer' => 4, 'gio' => 4, 'ven' => 0, 'sab' => 0, 'dom' => 0],
+            ['id' => 2, 'id_cliente' => 2, 'descrizione' => 'Sede Altra', 'lun' => 8, 'mar' => 0, 'mer' => 0, 'gio' => 0, 'ven' => 0, 'sab' => 0, 'dom' => 0],
+        ]);
+        DB::table('tc_turni')->insert([
+            ['id_cliente' => 1, 'id_sede' => 1, 'id_operatore' => 1, 'data_inizio' => '2026-11-09', 'data_fine' => '2026-11-09', 'ora_inizio' => '08:00', 'ora_fine' => '16:00', 'ore' => 8, 'stato' => 'F'],
+            ['id_cliente' => 1, 'id_sede' => 1, 'id_operatore' => 1, 'data_inizio' => '2026-11-10', 'data_fine' => '2026-11-10', 'ora_inizio' => '08:00', 'ora_fine' => '13:00', 'ore' => 5, 'stato' => 'F'],
+            ['id_cliente' => 1, 'id_sede' => 1, 'id_operatore' => 1, 'data_inizio' => '2026-11-11', 'data_fine' => '2026-11-11', 'ora_inizio' => '08:00', 'ora_fine' => '10:00', 'ore' => 2, 'stato' => 'F'],
+            ['id_cliente' => 1, 'id_sede' => 1, 'id_operatore' => 1, 'data_inizio' => '2026-11-12', 'data_fine' => '2026-11-12', 'ora_inizio' => '08:00', 'ora_fine' => '14:00', 'ore' => 6, 'stato' => 'F'],
+            ['id_cliente' => 2, 'id_sede' => 2, 'id_operatore' => 1, 'data_inizio' => '2026-11-09', 'data_fine' => '2026-11-09', 'ora_inizio' => '08:00', 'ora_fine' => '16:00', 'ore' => 20, 'stato' => 'F'],
+        ]);
+
+        $componente = Livewire::actingAs(User::findOrFail(1))->test(Turni::class)
+            ->assertDontSee('Copertura settimanale')
+            ->set('filtroSede', 1)
+            ->assertSee('Copertura settimanale')
+            ->assertSee('Lunedì 9 novembre: 8 su 8 ore richieste, in linea')
+            ->assertSee('Martedì 10 novembre: non richiesto')
+            ->assertSee('Mercoledì 11 novembre: 2 su 4 ore richieste, mancano 2 h')
+            ->assertSee('Giovedì 12 novembre: 6 su 4 ore richieste, 2 h in più')
+            ->assertSee('bg-sky-50/80', false)
+            ->assertDontSee('20 su 8')
+            ->set('filtroStato', 'non_eseguito')
+            ->assertSee('Lunedì 9 novembre: 8 su 8 ore richieste, in linea');
+
+        $componente->call('cambiaSettimanaCopertura', 1)
+            ->assertSee('Lunedì 16 novembre: 0 su 8 ore richieste, mancano 8 h')
+            ->assertDontSee('Lunedì 9 novembre: 8 su 8 ore richieste, in linea');
+    }
+
+    public function test_la_copertura_di_una_sede_non_visibile_resta_nascosta(): void
+    {
+        $this->travelTo(now()->setDate(2026, 11, 9)->setTime(12, 0));
+        $this->aggiungiOreRichieste();
+        DB::table('tc_admin')->insert([
+            'id' => 1, 'user_type' => 3, 'attivo' => 'Y', 'nome' => 'Cliente', 'cognome' => 'Uno', 'id_cliente' => '1',
+        ]);
+        DB::table('tc_clienti')->insert([
+            ['id' => 1, 'ragione_sociale' => 'AREA 1', 'isTest' => 0],
+            ['id' => 2, 'ragione_sociale' => 'AREA 2', 'isTest' => 0],
+        ]);
+        DB::table('tc_sedi')->insert([
+            ['id' => 2, 'id_cliente' => 2, 'descrizione' => 'Sede Altra', 'lun' => 8, 'mar' => 0, 'mer' => 0, 'gio' => 0, 'ven' => 0, 'sab' => 0, 'dom' => 0],
+        ]);
+        DB::table('tc_turni')->insert([
+            'id_cliente' => 2, 'id_sede' => 2, 'id_operatore' => 1, 'data_inizio' => '2026-11-09', 'data_fine' => '2026-11-09', 'ora_inizio' => '08:00', 'ora_fine' => '16:00', 'ore' => 20, 'stato' => 'F',
+        ]);
+
+        Livewire::actingAs(User::findOrFail(1))->test(Turni::class)
+            ->set('filtroSede', 2)
+            ->assertDontSee('Copertura settimanale')
+            ->assertDontSee('20 su 8')
+            ->assertDontSee('Sede Altra');
+    }
+
+    private function aggiungiOreRichieste(): void
+    {
+        Schema::table('tc_sedi', function (Blueprint $table): void {
+            foreach (['lun', 'mar', 'mer', 'gio', 'ven', 'sab', 'dom'] as $giorno) {
+                $table->float($giorno)->nullable();
+            }
+        });
     }
 }

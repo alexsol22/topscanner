@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#f4f9fc">
+    <x-ui.pwa />
     <title>Checklist collaudo manuale (accesso riservato) · Omnia Control</title>
     <style>
         :root {

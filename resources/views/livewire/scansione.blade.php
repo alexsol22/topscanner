@@ -2,8 +2,23 @@
 
     <div class="min-w-0 space-y-5">
         <div class="card overflow-hidden">
+        <div x-show="sostituzione" x-cloak class="space-y-2 px-5 py-8 text-center sm:px-8">
+            <p class="text-xl font-semibold text-slate-800">Sostituisci turno</p>
+            <p class="text-base leading-relaxed text-slate-600">Scansiona il QR principale della sede per la sostituzione del turno.</p>
+        </div>
+        <div x-show="!sostituzione">
         @if ($turno)
             @php $inCorso = $turno->stato === 'I'; @endphp
+            <div x-data="{ fotoDisponibile: @js((bool) $fotoSede) }" class="flex items-center justify-center bg-sky-50">
+                @if ($fotoSede)
+                    <img x-show="fotoDisponibile" x-on:error="fotoDisponibile = false" src="{{ $fotoSede }}" alt="Foto di {{ $turno->sede->descrizione }}" class="block max-h-64 w-auto max-w-full object-contain sm:max-h-80">
+                @endif
+                <div x-cloak x-show="!fotoDisponibile" class="flex h-28 w-full items-center justify-center text-sky-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-4h6v4M9 10h.01M12 10h.01M15 10h.01M9 13h.01M12 13h.01M15 13h.01"/>
+                    </svg>
+                </div>
+            </div>
             <div class="space-y-3 px-5 py-6 text-center sm:px-8 sm:py-8">
                 <span class="inline-flex rounded-full px-4 py-1.5 text-sm font-bold uppercase tracking-wide {{ $inCorso ? 'bg-orange-100 text-orange-700' : 'bg-emerald-100 text-emerald-700' }}">
                     {{ $inCorso ? 'Uscita' : 'Ingresso' }}
@@ -18,6 +33,7 @@
                 <p class="text-base leading-relaxed text-slate-600">Puoi timbrare da 15 minuti prima dell'inizio.</p>
             </div>
         @endif
+        </div>
 
         <div class="space-y-4 border-t border-sky-100 p-4 sm:space-y-5 sm:p-6">
             <div x-show="camera" x-cloak class="relative mx-auto w-full max-w-xl overflow-hidden rounded-2xl bg-slate-900">
@@ -42,9 +58,11 @@
                 </div>
             </div>
 
-            <button type="button" class="btn-primary min-h-14 w-full !px-5 !py-4 text-base sm:text-lg" x-show="!camera && !codice" @click="avvia()" :disabled="!{{ $turno ? 'true' : 'false' }}">
+            <button type="button" class="btn-primary min-h-14 w-full !px-5 !py-4 text-base sm:text-lg" x-show="!camera && !codice" @click="avvia()" :disabled="!sostituzione && !{{ $turno ? 'true' : 'false' }}">
                 <span class="inline-flex items-center justify-center gap-3"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M7 12h10"/></svg> Scansiona il QR</span>
             </button>
+            <button type="button" class="btn-soft min-h-12 w-full text-base" x-show="!camera && !codice && !sostituzione" @click="apriSostituzione()">Sostituisci turno</button>
+            <button type="button" class="btn-soft min-h-12 w-full text-base" x-show="sostituzione && !camera && !codice" x-cloak @click="chiudiSostituzione()">Chiudi</button>
             <button type="button" class="btn-soft min-h-12 w-full text-base" x-show="camera" x-cloak @click="ferma()">Annulla</button>
 
             <p class="text-center text-sm leading-relaxed" x-show="gps !== 'ok'" x-cloak :class="gps === 'attesa' ? 'text-slate-500' : 'text-rose-700'">

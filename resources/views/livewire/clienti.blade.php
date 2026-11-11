@@ -20,7 +20,17 @@
 
     @if (! $modal)
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h2 class="text-lg font-bold text-slate-800">Elenco clienti</h2>
+            <div class="flex flex-wrap items-center gap-3">
+                <h2 class="text-lg font-bold text-slate-800">Elenco clienti</h2>
+                <label for="clienti-per-pagina" class="flex items-center gap-2 text-sm font-medium text-slate-600">
+                    Mostra
+                    <select id="clienti-per-pagina" wire:model.live="perPagina" class="input !w-auto cursor-pointer py-2">
+                        @foreach ($perPaginaOpzioni as $quantita => $etichetta)
+                            <option value="{{ $quantita }}">{{ $etichetta }}</option>
+                        @endforeach
+                    </select>
+                </label>
+            </div>
             <div class="flex items-center gap-2">
                 <x-ui.filtri title="Ricerca cliente" trigger-label="Ricerca cliente" :values="['filtroRagioneSociale' => $filtroRagioneSociale, 'filtroPiva' => $filtroPiva, 'filtroCodiceFiscale' => $filtroCodiceFiscale, 'filtroEmail' => $filtroEmail, 'filtroTelefono' => $filtroTelefono]">
                     <x-slot:trigger>

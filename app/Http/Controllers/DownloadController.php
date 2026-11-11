@@ -15,6 +15,7 @@ use App\Models\Legacy\Turno;
 use App\Models\User;
 use App\Services\QrSede;
 use App\Services\RegistroGda;
+use App\Services\Timbratura;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
@@ -48,6 +49,15 @@ class DownloadController extends Controller
         }
 
         return Storage::disk(config('filesystems.files_disk'))->download($percorso);
+    }
+
+    /** Foto della sede del turno attivo dell'operatore (getImageSede). */
+    public function fotoTurnoAttivo(Timbratura $timbratura)
+    {
+        $percorso = $timbratura->turnoAttivo(auth()->user())?->sede?->percorsoImmagineTimbratura();
+        abort_unless($percorso && Storage::disk(config('filesystems.files_disk'))->exists($percorso), 404);
+
+        return Storage::disk(config('filesystems.files_disk'))->response($percorso, null, ['Cache-Control' => 'private, max-age=3600']);
     }
 
     public function fotoSede(Sede $sede)

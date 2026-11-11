@@ -213,8 +213,62 @@
                 <button wire:click="$set('vista', 'lista')" class="rounded-lg px-3 py-1.5 text-sm font-semibold {{ $vista === 'lista' ? 'bg-sky-500 text-white' : 'text-slate-600' }}">Lista</button>
             </div>
             @if ($staff) <button wire:click="nuovoInvio" class="btn-soft">✉ Invia turni</button> <button wire:click="nuovo" class="btn-primary">+ Nuovo turno</button> @endif
+            @if (auth()->user()->isOperatore())
+                <a href="{{ route('scansione', ['sostituzione' => 1]) }}" wire:navigate class="btn-primary">Sostituisci turno</a>
+            @endif
         </div>
     </div>
+
+    @if ($sedeSelezionata && $copertura !== [])
+        <section class="rounded-2xl border border-sky-200 bg-white p-3 shadow-sm sm:p-4">
+            <div class="mb-3 flex items-center justify-between gap-3">
+                <div class="min-w-0">
+                    <h2 class="text-sm font-semibold text-slate-800">Copertura settimanale</h2>
+                    <p class="truncate text-xs text-slate-500">
+                        {{ $copertura[0]['giorno']->locale('it')->translatedFormat('d M') }} – {{ $copertura[6]['giorno']->locale('it')->translatedFormat('d M Y') }}
+                        · ore programmate su ore richieste
+                    </p>
+                </div>
+                <div class="flex shrink-0 items-center gap-1">
+                    <button type="button" wire:click="cambiaSettimanaCopertura(-1)" class="btn-soft !px-2.5" aria-label="Settimana precedente">←</button>
+                    <button type="button" wire:click="cambiaSettimanaCopertura(1)" class="btn-soft !px-2.5" aria-label="Settimana successiva">→</button>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+                @foreach ($copertura as $giornoCopertura)
+                    <div
+                        wire:key="copertura-{{ $giornoCopertura['giorno']->toDateString() }}"
+                        role="group"
+                        aria-label="{{ $giornoCopertura['etichetta'] }}"
+                        @class([
+                            'rounded-xl px-2.5 py-2',
+                            'bg-emerald-50 ring-1 ring-emerald-200' => $giornoCopertura['stato'] === 'ok' && $giornoCopertura['richieste'] > 0,
+                            'bg-slate-50 ring-1 ring-slate-200' => $giornoCopertura['richieste'] <= 0,
+                            'bg-amber-50 ring-1 ring-amber-200' => $giornoCopertura['stato'] === 'scoperto',
+                            'bg-sky-100 ring-1 ring-sky-300' => $giornoCopertura['stato'] === 'extra',
+                            'outline outline-2 outline-offset-2 outline-sky-500' => $giornoCopertura['giorno']->isToday(),
+                        ])
+                    >
+                        <div aria-hidden="true">
+                            <div class="flex items-baseline justify-between gap-1">
+                                <span class="text-xs font-bold uppercase tracking-wide text-slate-600">{{ ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'][$giornoCopertura['giorno']->dayOfWeekIso - 1] }}</span>
+                                <span class="text-[11px] font-medium text-slate-500">{{ $giornoCopertura['giorno']->format('d/m') }}</span>
+                            </div>
+                            <p class="mt-1 text-sm font-semibold leading-tight text-slate-800">{{ $giornoCopertura['testo'] }}</p>
+                            @if ($giornoCopertura['esito'] !== '')
+                                <p @class([
+                                    'mt-0.5 text-[11px] font-medium',
+                                    'text-emerald-700' => $giornoCopertura['stato'] === 'ok',
+                                    'text-amber-800' => $giornoCopertura['stato'] === 'scoperto',
+                                    'text-sky-800' => $giornoCopertura['stato'] === 'extra',
+                                ])>{{ $giornoCopertura['esito'] }}</p>
+                            @endif
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+        </section>
+    @endif
 
     @if ($vista === 'calendario')
         <div class="grid grid-cols-2 items-center gap-2 rounded-2xl border border-sky-200 bg-sky-50 p-2 shadow-sm sm:gap-3 sm:p-3 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
@@ -248,11 +302,13 @@
                     @foreach (['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'] as $g)<div class="py-2 text-xs font-semibold uppercase text-slate-500">{{ $g }}</div>@endforeach
                 @endif
             </div>
+            @php($dateCopertura = array_map(fn (array $giornoCopertura): string => $giornoCopertura['giorno']->toDateString(), $copertura))
             <div class="grid {{ $periodoCalendario === 'giorno' ? 'grid-cols-1' : 'grid-cols-7' }}">
                 @for ($d = $calendario['da']->copy(); $d->lte($calendario['a']); $d->addDay())
                     @php($k = $d->toDateString())
                     @php($giorno = $calendario['turni']->get($k, collect()))
-                    <div wire:key="g{{ $k }}" class="group min-h-24 border-b border-r border-sky-100 p-1 sm:min-h-32 sm:p-1.5 {{ $periodoCalendario === 'giorno' ? 'min-h-48 sm:min-h-64' : '' }} {{ $periodoCalendario === 'mese' && $d->month !== $calendario['primo']->month ? 'bg-slate-50/60' : '' }}">
+                    @php($inCopertura = $periodoCalendario === 'mese' && in_array($k, $dateCopertura, true))
+                    <div wire:key="g{{ $k }}" class="group min-h-24 border-b border-r border-sky-100 p-1 sm:min-h-32 sm:p-1.5 {{ $periodoCalendario === 'giorno' ? 'min-h-48 sm:min-h-64' : '' }} {{ $inCopertura ? 'bg-sky-50/80' : ($periodoCalendario === 'mese' && $d->month !== $calendario['primo']->month ? 'bg-slate-50/60' : '') }}">
                         <div class="mb-1 flex items-center justify-between">
                             <button wire:click="vaiAlGiorno('{{ $k }}')" class="flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-xs font-semibold {{ $d->isToday() ? 'bg-sky-500 text-white' : ($periodoCalendario === 'mese' && $d->month !== $calendario['primo']->month ? 'text-slate-400' : 'text-slate-700') }}" aria-label="Mostra il {{ $d->locale('it')->translatedFormat('d F Y') }}">{{ $d->day }}</button>
                             @if ($staff)<button wire:click="nuovoGiorno('{{ $k }}')" class="hidden h-5 w-5 rounded text-sky-600 hover:bg-sky-100 group-hover:block" title="Aggiungi turno">+</button>@endif

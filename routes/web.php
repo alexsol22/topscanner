@@ -7,6 +7,44 @@ use App\Models\Legacy\Tracking;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
+Route::get('/manifest.webmanifest', function () {
+    $manifest = [
+        'id' => '/',
+        'name' => 'Omnia Control',
+        'short_name' => 'Omnia',
+        'start_url' => '/',
+        'scope' => '/',
+        'display' => 'standalone',
+        'background_color' => '#152B38',
+        'theme_color' => '#f4f9fc',
+        'lang' => 'it',
+        'icons' => [
+            [
+                'src' => '/brand/icon-192.png',
+                'sizes' => '192x192',
+                'type' => 'image/png',
+                'purpose' => 'any',
+            ],
+            [
+                'src' => '/brand/icon-512.png',
+                'sizes' => '512x512',
+                'type' => 'image/png',
+                'purpose' => 'any',
+            ],
+            [
+                'src' => '/brand/icon-maskable-512.png',
+                'sizes' => '512x512',
+                'type' => 'image/png',
+                'purpose' => 'maskable',
+            ],
+        ],
+    ];
+
+    return response(json_encode($manifest, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR), 200, [
+        'Content-Type' => 'application/manifest+json',
+    ]);
+})->name('pwa.manifest');
+
 Route::get('/login', Livewire\Login::class)->name('login')->middleware('guest');
 Route::match(['get', 'post'], '/sms/consegna', SmsConsegnaController::class)->name('sms.consegna');
 Route::get('/recupera-password', Livewire\RecuperaPassword::class)->name('password.recupero')->middleware('guest');
@@ -46,6 +84,7 @@ Route::middleware('auth')->group(function () {
 
     Route::middleware('ruolo:operatore')->group(function () {
         Route::get('/scansione', Livewire\Scansione::class)->name('scansione');
+        Route::get('/scansione/foto', [DownloadController::class, 'fotoTurnoAttivo'])->name('scansione.foto');
     });
 
     Route::middleware('ruolo:super_admin,admin,cliente')->group(function () {

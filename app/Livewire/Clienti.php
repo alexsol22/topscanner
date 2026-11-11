@@ -32,6 +32,9 @@ class Clienti extends Component
 
     private const ICONE = ['png' => 'file-image', 'jpg' => 'file-image', 'jpeg' => 'file-image', 'pdf' => 'file-pdf', 'xls' => 'file-excel', 'xlsx' => 'file-excel', 'zip' => 'file-archive', 'mp4' => 'file-video'];
 
+    /** @var list<int> */
+    private const PER_PAGINA = [10, 25, 50, 100];
+
     public string $cerca = '';
 
     public string $filtroRagioneSociale = '';
@@ -54,6 +57,9 @@ class Clienti extends Component
 
     #[Url]
     public string $tab = 'dati';
+
+    #[Url(as: 'per', except: 50)]
+    public int $perPagina = 50;
 
     /** @var array<int, int|string> */
     public array $preferiti = [];
@@ -109,8 +115,15 @@ class Clienti extends Component
 
     public function updating(string $name): void
     {
-        if (in_array($name, ['filtroRagioneSociale', 'filtroPiva', 'filtroCodiceFiscale', 'filtroEmail', 'filtroTelefono'], true)) {
+        if (in_array($name, ['filtroRagioneSociale', 'filtroPiva', 'filtroCodiceFiscale', 'filtroEmail', 'filtroTelefono', 'perPagina'], true)) {
             $this->resetPage();
+        }
+    }
+
+    public function updatedPerPagina(): void
+    {
+        if (! $this->perPaginaConsentita()) {
+            $this->perPagina = 50;
         }
     }
 
@@ -118,6 +131,10 @@ class Clienti extends Component
     public function mount(): void
     {
         Tracking::registra('Visualizzazione elenco clienti ');
+
+        if (! $this->perPaginaConsentita()) {
+            $this->perPagina = 50;
+        }
 
         if (! $this->modal) {
             return;
@@ -342,6 +359,20 @@ class Clienti extends Component
         session()->flash('esito', "Cliente {$cliente->ragione_sociale} eliminato.");
     }
 
+    private function perPaginaConsentita(): bool
+    {
+        return $this->perPagina === 0 || in_array($this->perPagina, self::PER_PAGINA, true);
+    }
+
+    private function quantitaPerPagina(int $totale): int
+    {
+        if ($this->perPagina === 0) {
+            return max(1, $totale);
+        }
+
+        return in_array($this->perPagina, self::PER_PAGINA, true) ? $this->perPagina : 50;
+    }
+
     /** @return array{sedi: int, turni: int, postazioni: int, documenti: int, account: int} */
     private function riepilogoEliminazione(): array
     {
@@ -358,14 +389,15 @@ class Clienti extends Component
 
     public function render()
     {
-        $clienti = $this->clientiVisibili()->with(['comune', 'provincia'])->withCount(['operatoriPreferiti', 'operatoriEsclusi'])
+        $elenco = $this->clientiVisibili()->with(['comune', 'provincia'])->withCount(['operatoriPreferiti', 'operatoriEsclusi'])
             ->when($this->cerca, fn ($q) => $q->where(fn ($w) => $w->where('ragione_sociale', 'like', "%{$this->cerca}%")->orWhereHas('comune', fn ($c) => $c->where('comune', 'like', "%{$this->cerca}%"))))
             ->when($this->filtroRagioneSociale !== '', fn ($q) => $q->where('ragione_sociale', 'like', "%{$this->filtroRagioneSociale}%"))
             ->when($this->filtroPiva !== '', fn ($q) => $q->where('piva', 'like', "%{$this->filtroPiva}%"))
             ->when($this->filtroCodiceFiscale !== '', fn ($q) => $q->where('codice_fiscale', 'like', "%{$this->filtroCodiceFiscale}%"))
             ->when($this->filtroEmail !== '', fn ($q) => $q->where('email', 'like', "%{$this->filtroEmail}%"))
             ->when($this->filtroTelefono !== '', fn ($q) => $q->where('telefono', 'like', "%{$this->filtroTelefono}%"))
-            ->orderBy('ragione_sociale')->paginate(10);
+            ->orderBy('ragione_sociale');
+        $clienti = $elenco->paginate($this->quantitaPerPagina($this->perPagina === 0 ? (clone $elenco)->count() : 0));
 
         $daEliminare = $this->eliminaId ? $this->clientiVisibili()->find($this->eliminaId) : null;
         $clienteOperatori = $this->operatoriClienteId ? $this->clientiVisibili()->findOrFail($this->operatoriClienteId) : null;
@@ -374,6 +406,7 @@ class Clienti extends Component
             'daEliminare' => $daEliminare,
             'riepilogo' => $daEliminare ? $this->riepilogoEliminazione() : [],
             'clienti' => $clienti,
+            'perPaginaOpzioni' => array_combine(self::PER_PAGINA, self::PER_PAGINA) + [0 => 'Tutti'],
             'clienteOperatori' => $clienteOperatori,
             'operatoriPreferiti' => $clienteOperatori?->operatoriPreferiti()->with('operatore')->get() ?? collect(),
             'operatoriEsclusi' => $clienteOperatori?->operatoriEsclusi()->with('operatore')->get() ?? collect(),

@@ -3,6 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <x-ui.pwa />
     <link rel="icon" type="image/svg+xml" href="{{ asset('brand/omnia-control.svg') }}?v=2">
     <title>Accedi · Omnia Control</title>
     <link href="https://fonts.bunny.net/css?family=inter:400,500,600,700" rel="stylesheet">

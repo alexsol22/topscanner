@@ -46,6 +46,7 @@ class Scansione extends Component
 
         return view('livewire.scansione', [
             'turno' => $turno,
+            'fotoSede' => $turno?->sede?->haImmagineTimbratura() ? route('scansione.foto') : null,
             'presenze' => $turno ? $turno->presenze()->with('postazione')->orderBy('data')->orderBy('orario')->get() : collect(),
             'prossimi' => Turno::with('sede')->where('id_operatore', $user->id)
                 ->whereRaw("CONCAT(data_inizio,' ',ora_inizio) > ?", [now()->format('Y-m-d H:i')])

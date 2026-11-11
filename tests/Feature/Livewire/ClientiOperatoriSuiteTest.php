@@ -72,7 +72,7 @@ class ClientiOperatoriSuiteTest extends TestCase
 
     public function test_clienti_list_search_and_pagination(): void
     {
-        foreach (range(1, 12) as $n) {
+        foreach (range(1, 51) as $n) {
             $this->cliente("Cliente $n");
         }
         $this->cliente('Zeta Unico');
@@ -80,6 +80,35 @@ class ClientiOperatoriSuiteTest extends TestCase
         Livewire::actingAs($this->admin())->test(Clienti::class)
             ->assertSee('Cliente 1')->assertDontSee('Zeta Unico')
             ->set('cerca', 'Zeta')->assertSee('Zeta Unico')->assertDontSee('Cliente 1');
+    }
+
+    public function test_elenco_clienti_mostra_cinquanta_record_e_consente_di_cambiarli(): void
+    {
+        foreach (range(1, 60) as $n) {
+            $this->cliente(sprintf('Cliente %02d', $n));
+        }
+
+        Livewire::actingAs($this->admin())->test(Clienti::class)
+            ->assertSee('id="clienti-per-pagina"', false)
+            ->assertSee('>Tutti</option>', false)
+            ->assertSee('Cliente 01')
+            ->assertDontSee('Cliente 51')
+            ->set('perPagina', 0)
+            ->assertSet('perPagina', 0)
+            ->assertSee('Cliente 01')
+            ->assertSee('Cliente 60')
+            ->set('perPagina', 100)
+            ->assertSee('Cliente 51')
+            ->assertSee('Cliente 60')
+            ->set('perPagina', 10)
+            ->call('setPage', 2)
+            ->assertDontSee('Cliente 01')
+            ->set('perPagina', 50)
+            ->assertSee('Cliente 01')
+            ->assertDontSee('Cliente 51')
+            ->set('perPagina', 7)
+            ->assertSet('perPagina', 50)
+            ->assertDontSee('Cliente 51');
     }
 
     public function test_clienti_filters_match_individual_fields_and_combine(): void

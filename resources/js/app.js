@@ -43,9 +43,26 @@ collegaSelect2Qr();
 document.addEventListener('alpine:init', () => {
     window.Alpine.data('scanner', () => ({
         camera: false, stream: null, caricamento: false, errore: null,
-        gps: 'attesa', lat: null, lng: null, codice: null,
+        gps: 'attesa', lat: null, lng: null, codice: null, sostituzione: false,
 
-        init() { this.posizione(); },
+        init() {
+            this.posizione();
+            if (new URLSearchParams(window.location.search).get('sostituzione') === '1') {
+                this.sostituzione = true;
+            }
+        },
+
+        apriSostituzione() {
+            this.errore = null;
+            this.sostituzione = true;
+        },
+
+        chiudiSostituzione() {
+            this.sostituzione = false;
+            this.ferma();
+            this.annulla();
+            this.togliSostituzioneDallIndirizzo();
+        },
 
         posizione() {
             if (!navigator.geolocation) { this.gps = 'assente'; return; }
@@ -61,9 +78,14 @@ document.addEventListener('alpine:init', () => {
             this.caricamento = true;
             this.errore = null;
             try {
-                await this.$wire.timbra(this.codice, this.lat, this.lng, false, this.$refs.nota?.value ?? '');
+                await this.$wire.timbra(this.codice, this.lat, this.lng, this.sostituzione, this.$refs.nota?.value ?? '');
+                const riuscita = this.$wire.risultato?.ok === true;
                 this.codice = null;
                 if (this.$refs.nota) this.$refs.nota.value = '';
+                if (riuscita) {
+                    this.sostituzione = false;
+                    this.togliSostituzioneDallIndirizzo();
+                }
             } catch {
             } finally { this.caricamento = false; }
         },
@@ -125,6 +147,13 @@ document.addEventListener('alpine:init', () => {
             this.camera = false;
             this.stream?.getTracks().forEach(t => t.stop());
             this.stream = null;
+        },
+
+        togliSostituzioneDallIndirizzo() {
+            const url = new URL(window.location.href);
+            if (!url.searchParams.has('sostituzione')) return;
+            url.searchParams.delete('sostituzione');
+            history.replaceState({}, '', url);
         },
     }));
 });

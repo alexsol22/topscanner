@@ -155,6 +155,14 @@ class Turni extends Component
         $this->allineaSelezioniCalendario();
     }
 
+    public function cambiaSettimanaCopertura(int $delta): void
+    {
+        abort_unless($delta === -1 || $delta === 1, 422);
+
+        $this->mese = Carbon::parse($this->mese)->startOfWeek(Carbon::MONDAY)->addWeeks($delta)->toDateString();
+        $this->allineaSelezioniCalendario();
+    }
+
     public function vaiAlGiorno(string $data): void
     {
         $this->mese = Carbon::parse($data)->toDateString();
@@ -404,6 +412,44 @@ class Turni extends Component
         $this->modalInvio = false;
     }
 
+    /**
+     * @param  array<int, array{giorno: Carbon, richieste: float, eseguite: float, stato: string}>  $giorni
+     * @return array<int, array{giorno: Carbon, richieste: float, eseguite: float, stato: string, testo: string, esito: string, etichetta: string}>
+     */
+    private function presentaCopertura(array $giorni): array
+    {
+        return array_map(function (array $giorno): array {
+            $nome = ucfirst($giorno['giorno']->locale('it')->translatedFormat('l j F'));
+
+            if ($giorno['richieste'] <= 0) {
+                $giorno['testo'] = 'Non richiesto';
+                $giorno['esito'] = '';
+                $giorno['etichetta'] = $nome.': non richiesto';
+
+                return $giorno;
+            }
+
+            $programmate = $this->formatOre($giorno['eseguite']);
+            $richieste = $this->formatOre($giorno['richieste']);
+            $giorno['testo'] = $programmate.' su '.$richieste;
+            $giorno['esito'] = match ($giorno['stato']) {
+                'extra' => $this->formatOre($giorno['eseguite'] - $giorno['richieste']).' h in più',
+                'scoperto' => 'Mancano '.$this->formatOre($giorno['richieste'] - $giorno['eseguite']).' h',
+                default => 'In linea',
+            };
+            $giorno['etichetta'] = $nome.': '.$giorno['testo'].' ore richieste, '.mb_strtolower($giorno['esito'], 'UTF-8');
+
+            return $giorno;
+        }, $giorni);
+    }
+
+    private function formatOre(float $ore): string
+    {
+        $formattato = number_format($ore, 2, '.', '');
+
+        return str_contains($formattato, '.') ? rtrim(rtrim($formattato, '0'), '.') : $formattato;
+    }
+
     private function allineaSelezioniCalendario(): void
     {
         $riferimento = Carbon::parse($this->mese);
@@ -535,6 +581,9 @@ class Turni extends Component
             ->values();
 
         $sedeSelezionata = $this->filtroSede ? $this->sediVisibili()->find($this->filtroSede) : null;
+        $copertura = $sedeSelezionata
+            ? $this->presentaCopertura($piano->copertura($sedeSelezionata, Carbon::parse($this->mese)->startOfWeek(Carbon::MONDAY)))
+            : [];
         $operatoreSelezionato = $this->filtroOperatore
             ? $this->query()->where('id_operatore', $this->filtroOperatore)->with('operatore')->first()?->operatore
             : null;
@@ -556,6 +605,7 @@ class Turni extends Component
             'suggerimentiSedi' => $suggerimentiSedi,
             'suggerimentiOperatori' => $suggerimentiOperatori,
             'sedeSelezionata' => $sedeSelezionata,
+            'copertura' => $copertura,
             'operatoreSelezionato' => $operatoreSelezionato,
             'clienti' => $clienti,
             'clienteSelezionato' => $clienti->firstWhere('id', $this->filtroCliente),
