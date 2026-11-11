@@ -14,8 +14,12 @@ class QrSede
         return trim(config('filesystems.private_paths.documenti'), '/').'/QrcodeText/'.str_replace(['/', '\\'], '_', $codice).'.png';
     }
 
-    public function genera(string $codice): void
+    public function genera(string $codice, string $colore = '#000000', ?string $logo = null, string $titolo = ''): void
     {
+        if (! preg_match('/^#[0-9a-fA-F]{6}$/', $colore)) {
+            throw new RuntimeException('Il colore del QR non è valido.');
+        }
+
         $disco = Storage::disk(config('filesystems.files_disk'));
         $percorso = $this->percorso($codice);
 
@@ -23,26 +27,26 @@ class QrSede
             throw new RuntimeException("Il file QR esiste già: {$percorso}");
         }
 
-        $this->scriviPng($codice, $percorso);
+        $this->scriviPng($codice, $percorso, $colore, $logo, trim($titolo));
     }
 
-    public function generaPersonalizzato(string $codice, string $colore, ?string $logo = null): void
+    public function generaPersonalizzato(string $codice, string $colore, ?string $logo = null, string $titolo = ''): void
     {
         if (! preg_match('/^#[0-9a-fA-F]{6}$/', $colore)) {
             throw new RuntimeException('Il colore del QR non è valido.');
         }
 
         $percorso = $this->percorso($codice);
-        $this->scriviPng($codice, $percorso, $colore, $logo);
+        $this->scriviPng($codice, $percorso, $colore, $logo, trim($titolo));
     }
 
-    private function scriviPng(string $codice, string $percorso, string $colore = '#000000', ?string $logo = null): void
+    private function scriviPng(string $codice, string $percorso, string $colore = '#000000', ?string $logo = null, string $titolo = ''): void
     {
         $matrice = Encoder::encode($codice, ErrorCorrectionLevel::H())->getMatrix();
         $scala = 16;
         $margine = 4;
         $lato = ($matrice->getWidth() + 2 * $margine) * $scala;
-        $immagine = imagecreatetruecolor($lato, $lato + 50);
+        $immagine = imagecreatetruecolor($lato, $lato + $this->altezzaDidascalia($titolo));
         $bianco = imagecolorallocate($immagine, 255, 255, 255);
         [$rosso, $verde, $blu] = sscanf($colore, '#%02x%02x%02x');
         $coloreQr = imagecolorallocate($immagine, $rosso, $verde, $blu);
@@ -93,13 +97,7 @@ class QrSede
             imagedestroy($immagineLogo);
         }
 
-        $larghezzaTesto = imagefontwidth(5) * strlen($codice);
-        $altezzaTesto = imagefontheight(5);
-        $testo = imagecreatetruecolor($larghezzaTesto, $altezzaTesto);
-        imagefill($testo, 0, 0, imagecolorallocate($testo, 255, 255, 255));
-        imagestring($testo, 5, 0, 0, $codice, imagecolorallocate($testo, $rosso, $verde, $blu));
-        imagecopyresized($immagine, $testo, intdiv($lato - $larghezzaTesto * 2, 2), $lato + 10, 0, 0, $larghezzaTesto * 2, $altezzaTesto * 2, $larghezzaTesto, $altezzaTesto);
-        imagedestroy($testo);
+        $this->disegnaDidascalia($immagine, $lato, $coloreQr, $codice, $titolo);
 
         ob_start();
         try {
@@ -112,8 +110,39 @@ class QrSede
             imagedestroy($immagine);
         }
 
+        $disco = Storage::disk(config('filesystems.files_disk'));
+
         if ($png === false || ! $disco->put($percorso, $png)) {
             throw new RuntimeException("Impossibile salvare l'immagine QR: {$percorso}");
+        }
+    }
+
+    private function altezzaDidascalia(string $titolo): int
+    {
+        return $titolo === '' ? 56 : 96;
+    }
+
+    private function disegnaDidascalia(\GdImage $immagine, int $lato, int $colore, string $codice, string $titolo): void
+    {
+        $font = resource_path('fonts/DejaVuSans.ttf');
+        $righe = $titolo === ''
+            ? [['testo' => $codice, 'size' => 18]]
+            : [['testo' => $titolo, 'size' => 22], ['testo' => $codice, 'size' => 16]];
+
+        if (! is_file($font)) {
+            imagestring($immagine, 5, 8, $lato + 12, $codice, $colore);
+
+            return;
+        }
+
+        $y = $lato + 4;
+
+        foreach ($righe as $riga) {
+            $box = imagettfbbox($riga['size'], 0, $font, $riga['testo']);
+            $larghezza = $box === false ? 0 : abs($box[2] - $box[0]);
+            $x = (int) max(0, ($lato - $larghezza) / 2);
+            $y += $riga['size'] + 10;
+            imagettftext($immagine, $riga['size'], 0, $x, $y, $colore, $font, $riga['testo']);
         }
     }
 }

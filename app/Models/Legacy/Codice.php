@@ -7,6 +7,7 @@ use BaconQrCode\Renderer\ImageRenderer;
 use BaconQrCode\Renderer\RendererStyle\RendererStyle;
 use BaconQrCode\Writer;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use RuntimeException;
 
 class Codice extends LegacyModel
 {
@@ -35,14 +36,42 @@ class Codice extends LegacyModel
         return (new Writer(new ImageRenderer(new RendererStyle($size, 1), new SvgImageBackEnd)))->writeString($this->codice);
     }
 
-    /** Come MyQrCode::_generateCode di Yii: ITALPOL* + 6 cifre, univoco. */
-    public static function generaCodice(): string
+    /**
+     * Prossimo ITALPOL* a 6 cifre, in coda alla numerazione già usata.
+     * I codici non numerici (per esempio ITALPOL*S12) non contano.
+     * I riservati sono numeri scelti in questa richiesta ma non ancora scritti.
+     *
+     * @param  array<int, string>  $riservati
+     */
+    public static function prossimoCodice(array $riservati = []): string
     {
+        $numero = static::ultimoNumero($riservati);
+
         do {
-            $codice = 'ITALPOL*'.str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-        } while (static::where('codice', $codice)->exists());
+            $numero++;
+
+            if ($numero > 999999) {
+                throw new RuntimeException('Numerazione QR esaurita.');
+            }
+
+            $codice = 'ITALPOL*'.str_pad((string) $numero, 6, '0', STR_PAD_LEFT);
+        } while (in_array($codice, $riservati, true) || static::query()->where('codice', $codice)->exists());
 
         return $codice;
+    }
+
+    /** @param  array<int, string>  $riservati */
+    private static function ultimoNumero(array $riservati): int
+    {
+        $massimo = 0;
+
+        foreach (static::query()->pluck('codice')->merge($riservati) as $codice) {
+            if (preg_match('/^ITALPOL\*(\d{6})$/', (string) $codice, $corrispondenza) === 1) {
+                $massimo = max($massimo, (int) $corrispondenza[1]);
+            }
+        }
+
+        return $massimo;
     }
 
     /** Equivale a generateCodes(1) + associaCodice di Yii: la riga nasce 'C' e viene subito associata ('A'). */

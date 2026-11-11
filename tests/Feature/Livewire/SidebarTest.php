@@ -81,8 +81,10 @@ class SidebarTest extends TestCase
             ->assertSee('WhatsApp inviati')
             ->assertSee('aria-disabled="true"', false)
             ->assertSee('Utenti')
+            ->assertSee('Generatore QR')
             ->assertDontSee('Data Base');
         $risposta->assertDontSee('href="'.route('accessi').'"', false);
+        $risposta->assertDontSee('href="'.url('/generatore-qr').'"', false);
         $risposta->assertDontSee('Canale messaggi');
         $risposta->assertDontSee('href="'.route('sedi').'"', false);
     }

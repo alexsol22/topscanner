@@ -9,13 +9,13 @@ use Illuminate\Console\Command;
 
 class InviaAvvisoTurni extends Command
 {
-    protected $signature = 'notifiche:avviso-turni {--prova-sicura : Limita la prova all’operatore autorizzato, senza SMS né modifiche}';
+    protected $signature = 'notifiche:avviso-turni {--prova-sicura : Limita la prova all’operatore e al cliente autorizzati: mail solo a lui, senza SMS né modifiche}';
 
     protected $description = 'Invia agli operatori l\'email di promemoria per i turni in partenza (modello messaggio 1)';
 
     public function handle(Comunicazioni $comunicazioni, ProvaNotifiche $prova): int
     {
-        $idProva = $this->option('prova-sicura') ? $prova->attiva($comunicazioni) : null;
+        $contesto = $prova->contesto($comunicazioni, (bool) $this->option('prova-sicura'));
         $config = Messaggio::find(1);
 
         if (! $config) {
@@ -26,7 +26,7 @@ class InviaAvvisoTurni extends Command
         $ora = now()->startOfHour()->addDays((int) $config->giorni)->addHours((int) $config->ore)->format('H:i');
 
         $turni = $comunicazioni->turni()
-            ->when($idProva !== null, fn ($query) => $query->where('t.id_operatore', $idProva))
+            ->when($contesto !== null, fn ($query) => $query->where('t.id_operatore', $contesto['operatore'])->where('t.id_cliente', $contesto['cliente']))
             ->whereDate('t.data_inizio', $giorno)
             ->where('t.ora_inizio', $ora)
             ->get();

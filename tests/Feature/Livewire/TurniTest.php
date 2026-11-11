@@ -164,6 +164,32 @@ class TurniTest extends TestCase
             ->assertDontSee('Totale ore:');
     }
 
+    public function test_la_lista_mostra_prima_la_data_piu_recente(): void
+    {
+        DB::table('tc_admin')->insert([
+            'id' => 1, 'user_type' => 2, 'attivo' => 'Y', 'nome' => 'Admin', 'cognome' => 'Test',
+        ]);
+        DB::table('tc_clienti')->insert(['id' => 1, 'ragione_sociale' => 'Cliente', 'isTest' => 0]);
+        DB::table('tc_sedi')->insert(['id' => 1, 'id_cliente' => 1, 'descrizione' => 'Sede']);
+        DB::table('tc_turni')->insert([
+            ['id_cliente' => 1, 'id_sede' => 1, 'id_operatore' => 1, 'data_inizio' => '2026-11-09', 'data_fine' => '2026-11-09', 'ora_inizio' => '08:00', 'ora_fine' => '12:00', 'ore' => 4, 'stato' => 'F'],
+            ['id_cliente' => 1, 'id_sede' => 1, 'id_operatore' => 1, 'data_inizio' => '2026-11-11', 'data_fine' => '2026-11-11', 'ora_inizio' => '14:00', 'ora_fine' => '18:00', 'ore' => 4, 'stato' => 'P'],
+            ['id_cliente' => 1, 'id_sede' => 1, 'id_operatore' => 1, 'data_inizio' => '2026-11-11', 'data_fine' => '2026-11-11', 'ora_inizio' => '08:00', 'ora_fine' => '12:00', 'ore' => 4, 'stato' => 'P'],
+        ]);
+
+        $html = Livewire::actingAs(User::findOrFail(1))->test(Turni::class)
+            ->set('vista', 'lista')
+            ->html();
+
+        $mattina = strpos($html, '11/11/2026 08:00');
+        $pomeriggio = strpos($html, '11/11/2026 14:00');
+        $precedente = strpos($html, '09/11/2026 08:00');
+
+        $this->assertNotFalse($mattina);
+        $this->assertLessThan($pomeriggio, $mattina);
+        $this->assertLessThan($precedente, $pomeriggio);
+    }
+
     public function test_turno_shows_progress_for_registered_start_and_end(): void
     {
         DB::table('tc_admin')->insert([

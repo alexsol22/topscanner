@@ -12,13 +12,15 @@ use Illuminate\Console\Command;
 
 class InviaRitardi extends Command
 {
-    protected $signature = 'notifiche:ritardi {--prova-sicura : Limita la prova all’operatore autorizzato, senza SMS né modifiche}';
+    protected $signature = 'notifiche:ritardi {--prova-sicura : Limita la prova all’operatore e al cliente autorizzati: mail solo a lui e senza SMS, segnando comunque ritardo e coda}';
 
     protected $description = 'Invia le email di ritardo timbratura inizio/fine turno (modelli 2 e 3) e le comunicazioni turni in coda';
 
     public function handle(Comunicazioni $comunicazioni, ProvaNotifiche $prova): int
     {
-        $idProva = $this->option('prova-sicura') ? $prova->attiva($comunicazioni) : null;
+        $contesto = $prova->contesto($comunicazioni, (bool) $this->option('prova-sicura'));
+        $idProva = $contesto['operatore'] ?? null;
+        $idCliente = $contesto['cliente'] ?? null;
         // Come in Yii, a mezzanotte non si elabora nulla
         if (now()->hour === 0) {
             return self::SUCCESS;
@@ -26,8 +28,8 @@ class InviaRitardi extends Command
 
         $this->inviaComunicazioniInCoda($comunicazioni, $idProva);
 
-        $this->info('Ritardi inizio turno: '.$this->elaboraRitardi($comunicazioni, Messaggio::find(2), 'I', $idProva));
-        $this->info('Ritardi fine turno: '.$this->elaboraRitardi($comunicazioni, Messaggio::find(3), 'F', $idProva));
+        $this->info('Ritardi inizio turno: '.$this->elaboraRitardi($comunicazioni, Messaggio::find(2), 'I', $idProva, $idCliente));
+        $this->info('Ritardi fine turno: '.$this->elaboraRitardi($comunicazioni, Messaggio::find(3), 'F', $idProva, $idCliente));
 
         return self::SUCCESS;
     }
@@ -43,14 +45,12 @@ class InviaRitardi extends Command
         foreach ($codaQuery->get() as $coda) {
             $comunicazioni->invia([$coda->email => (string) $coda->nome], 'Comunicazione turni', (string) $coda->testo, (int) $coda->id_operatore);
 
-            if ($idProva === null) {
-                $coda->update(['sent' => 'Y', 'data_sent' => now()]);
-            }
+            $coda->update(['sent' => 'Y', 'data_sent' => now()]);
         }
     }
 
     /** Ritardo timbratura: $tipo 'I' = inizio turno, 'F' = fine turno. */
-    private function elaboraRitardi(Comunicazioni $comunicazioni, ?Messaggio $config, string $tipo, ?int $idProva): int
+    private function elaboraRitardi(Comunicazioni $comunicazioni, ?Messaggio $config, string $tipo, ?int $idProva, ?int $idCliente): int
     {
         if (! $config) {
             return 0;
@@ -65,7 +65,7 @@ class InviaRitardi extends Command
         $ora = now()->addDays((int) $config->giorni)->subMinutes((int) $config->minuti)->format('H:i');
 
         $turni = $comunicazioni->turni()
-            ->when($idProva !== null, fn ($query) => $query->where('t.id_operatore', $idProva))
+            ->when($idProva !== null, fn ($query) => $query->where('t.id_operatore', $idProva)->where('t.id_cliente', $idCliente))
             ->whereDate($campoData, $giorno)->where($campoOra, '<', $ora)->get();
         $notificati = 0;
 
@@ -83,9 +83,7 @@ class InviaRitardi extends Command
             $ritardo ??= new Ritardo(['id_turno' => $turno->id, 'id_operatore' => $turno->id_operatore, 'inizio' => 0, 'fine' => 0]);
             $ritardo->{$colonna} = (int) $ritardo->{$colonna} + 1;
             $ritardo->{"data_ritardo_{$colonna}"} = now();
-            if ($idProva === null) {
-                $ritardo->save();
-            }
+            $ritardo->save();
 
             $notificati++;
 

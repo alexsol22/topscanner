@@ -8,7 +8,10 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-Schedule::command('notifiche:avviso-turni')->hourly()->withoutOverlapping();
-Schedule::command('notifiche:ritardi')->everyFiveMinutes()->withoutOverlapping();
-Schedule::command('notifiche:scadenze')->dailyAt('08:00')->withoutOverlapping();
-Schedule::command('notifiche:programmazione')->weeklyOn(1, '07:00')->withoutOverlapping();
+// Flag senza valore: ['--prova-sicura' => true] diventa --prova-sicura=1 e Symfony rifiuta l'opzione.
+$prova = config('notifiche.prova') ? ['--prova-sicura'] : [];
+
+Schedule::command('notifiche:avviso-turni', $prova)->hourly()->withoutOverlapping();
+Schedule::command('notifiche:ritardi', $prova)->everyFiveMinutes()->withoutOverlapping();
+Schedule::command('notifiche:scadenze', $prova)->dailyAt('08:00')->withoutOverlapping();
+Schedule::command('notifiche:programmazione', $prova)->weeklyOn(1, '07:00')->withoutOverlapping();

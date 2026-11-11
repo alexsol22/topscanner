@@ -201,54 +201,187 @@ class SediSuiteTest extends TestCase
         $this->actingAs($this->admin())->get(route('postazioni.qrcode', $sede['postazione']))->assertNotFound();
     }
 
-    public function test_qr_generator_shows_image_status_and_recreates_a_missing_associated_image(): void
+    public function test_qr_generator_shows_the_next_code_and_a_searchable_list_of_free_and_used_codes(): void
     {
-        $this->markTestSkipped('Generatore QR temporaneamente disattivato.');
-
-        $staff = $this->admin();
         $cliente = $this->cliente();
         $sede = $this->sedeCompleta($cliente);
-        $codiceSede = DB::table('tc_codici')->find($sede['codiceSede']);
-        $percorsoSede = app(QrSede::class)->percorso($codiceSede->codice);
-        $percorsoPostazione = app(QrSede::class)->percorso('ITALPOL*P'.$sede['postazione']);
-        Storage::disk($this->disco)->put($percorsoPostazione, 'immagine già presente');
+        DB::table('tc_codici')->insert(['codice' => 'ITALPOL*000300', 'stato' => 'C']);
+        Storage::disk($this->disco)->put('protected/documenti/QrcodeText/ITALPOL*P'.$sede['postazione'].'.png', 'png');
 
-        $this->actingAs($staff)->get(route('generatore-qr'))
-            ->assertOk()
-            ->assertSee('QR code associati')
-            ->assertSee($codiceSede->codice)
-            ->assertSee('Sede: Sede Uno')
-            ->assertSee('Mancante')
-            ->assertSee('Presente')
-            ->assertSee('Modifica')
-            ->assertSee('Seleziona un codice dalla lista');
+        $this->actingAs($this->admin())->get('/generatore-qr')->assertNotFound();
 
-        Livewire::actingAs($staff)->test(GeneratoreQr::class)
-            ->call('selezionaCodice', $codiceSede->id)
-            ->assertSee('Modifica immagine QR')
-            ->assertSee($codiceSede->codice)
-            ->set('colore', '#ff0000')
-            ->set('logo', UploadedFile::fake()->image('logo.png', 32, 32))
-            ->call('salvaImmagine')
+        Livewire::actingAs($this->admin())->test(GeneratoreQr::class)
+            ->assertSee('ITALPOL*000301')
+            ->assertSee('Colore del codice QR')
+            ->assertSee('Titolo sotto il QR')
+            ->assertSee('Logo al centro')
+            ->assertSee('Nuovo codice')
+            ->assertSee('Codice libero senza foto')
+            ->assertSee('ITALPOL*000300 — Libero, senza foto')
+            ->assertSee('ITALPOL*S'.$sede['sede'].' — Assegnato, senza foto')
+            ->assertSee('ITALPOL*P'.$sede['postazione'].' — Assegnato, con foto')
+            ->assertDontSee('Occupato')
+            ->assertDontSee('Cerca una sede')
+            ->assertDontSee('Associa')
+            ->set('titolo', 'Portineria')
+            ->assertSee('Portineria');
+    }
+
+    public function test_qr_generator_saves_the_image_on_the_selected_code_without_a_photo(): void
+    {
+        $libero = DB::table('tc_codici')->insertGetId(['codice' => 'ITALPOL*000119', 'stato' => 'C']);
+        $assegnato = DB::table('tc_codici')->insertGetId([
+            'codice' => 'ITALPOL*000118',
+            'stato' => 'A',
+            'tipo' => 'S',
+            'id_sede' => 5,
+        ]);
+        $conFoto = DB::table('tc_codici')->insertGetId(['codice' => 'ITALPOL*000212', 'stato' => 'C']);
+        Storage::disk($this->disco)->put('protected/documenti/QrcodeText/ITALPOL*000212.png', 'png');
+
+        $pagina = Livewire::actingAs($this->admin())->test(GeneratoreQr::class)
+            ->set('modalita', 'esistente');
+        $this->assertSame([(string) $libero], $pagina->viewData('codiciSenzaFoto')->pluck('id')->all());
+
+        $pagina
+            ->assertDontSee('ITALPOL*000213')
+            ->set('codiceEsistenteId', (string) $libero)
+            ->set('titolo', 'Portineria')
+            ->call('generaLiberi')
             ->assertHasNoErrors()
-            ->assertSee("Immagine QR aggiornata per {$codiceSede->codice}.");
+            ->assertSee('Foto salvata su ITALPOL*000119.')
+            ->assertSee('ITALPOL*000119 — Libero, con foto');
 
-        Storage::disk($this->disco)->assertExists($percorsoSede);
-        $this->assertSame("\x89PNG\r\n\x1a\n", substr(Storage::disk($this->disco)->get($percorsoSede), 0, 8));
-        $this->assertSame('immagine già presente', Storage::disk($this->disco)->get($percorsoPostazione));
-        $this->assertSame($codiceSede->codice, DB::table('tc_codici')->where('id', $codiceSede->id)->value('codice'));
-        $this->assertSame('A', DB::table('tc_codici')->where('id', $codiceSede->id)->value('stato'));
+        $this->assertNull(DB::table('tc_codici')->where('codice', 'ITALPOL*000213')->first());
+        $riga = DB::table('tc_codici')->find($libero);
+        $this->assertSame('C', $riga->stato);
+        $this->assertNull($riga->tipo);
+        $this->assertNull($riga->id_sede);
+        Storage::disk($this->disco)->assertExists('protected/documenti/QrcodeText/ITALPOL*000119.png');
+        $this->assertSame('image/png', getimagesizefromstring(Storage::disk($this->disco)->get('protected/documenti/QrcodeText/ITALPOL*000119.png'))['mime']);
+        $this->assertSame('png', Storage::disk($this->disco)->get('protected/documenti/QrcodeText/ITALPOL*000212.png'));
 
-        $this->actingAs($staff)->get(route('codici.qrcode', $codiceSede->id))
-            ->assertOk()
-            ->assertDownload(basename($percorsoSede));
+        Livewire::actingAs($this->admin())->test(GeneratoreQr::class)
+            ->set('modalita', 'esistente')
+            ->set('codiceEsistenteId', (string) $conFoto)
+            ->call('generaLiberi')
+            ->assertHasErrors(['codiceEsistenteId' => 'Questo codice ha già la foto.']);
+
+        Livewire::actingAs($this->admin())->test(GeneratoreQr::class)
+            ->set('modalita', 'esistente')
+            ->set('codiceEsistenteId', (string) $assegnato)
+            ->call('generaLiberi')
+            ->assertHasErrors(['codiceEsistenteId' => 'Scegli un codice libero senza foto.']);
+
+        Storage::disk($this->disco)->assertMissing('protected/documenti/QrcodeText/ITALPOL*000118.png');
+
+        Livewire::actingAs($this->admin())->test(GeneratoreQr::class)
+            ->set('modalita', 'esistente')
+            ->call('generaLiberi')
+            ->assertHasErrors(['codiceEsistenteId' => 'Scegli un codice libero senza foto.']);
     }
 
     public function test_qr_generator_is_not_available_to_non_staff_users(): void
     {
-        $this->markTestSkipped('Generatore QR temporaneamente disattivato.');
+        $operatore = $this->utente(4, 901);
 
-        $this->actingAs($this->utente(4, 901))->get(route('generatore-qr'))->assertForbidden();
+        $this->actingAs($operatore)->get('/generatore-qr')->assertNotFound();
+        Livewire::actingAs($operatore)->test(GeneratoreQr::class)->assertForbidden();
+    }
+
+    public function test_qr_generator_creates_the_next_numbers_and_the_site_form_lists_them(): void
+    {
+        DB::table('tc_codici')->insert([
+            ['codice' => 'ITALPOL*000299', 'stato' => 'A', 'tipo' => 'S'],
+            ['codice' => 'ITALPOL*S12', 'stato' => 'A', 'tipo' => 'S'],
+        ]);
+
+        Livewire::actingAs($this->admin())->test(GeneratoreQr::class)
+            ->set('quantita', 2)
+            ->set('titolo', 'Portineria')
+            ->set('colore', '#112233')
+            ->set('logo', UploadedFile::fake()->image('logo.png', 32, 32))
+            ->call('generaLiberi')
+            ->assertHasNoErrors()
+            ->assertSee('Creati da ITALPOL*000300 a ITALPOL*000301.')
+            ->assertSee('ITALPOL*000302');
+
+        $codici = DB::table('tc_codici')->whereIn('codice', ['ITALPOL*000300', 'ITALPOL*000301'])->orderBy('codice')->get();
+        $this->assertSame(['ITALPOL*000300', 'ITALPOL*000301'], $codici->pluck('codice')->all());
+
+        foreach ($codici as $codice) {
+            $this->assertSame('C', $codice->stato);
+            $this->assertNull($codice->tipo);
+            $this->assertNull($codice->id_sede);
+            $this->assertNull($codice->id_postazione);
+            $percorso = 'protected/documenti/QrcodeText/'.$codice->codice.'.png';
+            Storage::disk($this->disco)->assertExists($percorso);
+            $this->assertSame('image/png', getimagesizefromstring(Storage::disk($this->disco)->get($percorso))['mime']);
+        }
+
+        $qr = app(QrSede::class);
+        $qr->genera('ITALPOL*000302');
+        $conTitolo = getimagesizefromstring(Storage::disk($this->disco)->get('protected/documenti/QrcodeText/ITALPOL*000300.png'));
+        $senzaTitolo = getimagesizefromstring(Storage::disk($this->disco)->get($qr->percorso('ITALPOL*000302')));
+        $this->assertGreaterThan($senzaTitolo[1], $conTitolo[1]);
+
+        $this->actingAs($this->admin())->get(route('codici.qrcode', $codici[0]->id))
+            ->assertOk()
+            ->assertDownload('ITALPOL*000300.png');
+
+        Livewire::actingAs($this->admin())->test(SedeForm::class)
+            ->assertSeeInOrder(['ITALPOL*000300', 'ITALPOL*000301'])
+            ->assertDontSee('ITALPOL*000299')
+            ->assertDontSee('ITALPOL*000302');
+    }
+
+    public function test_qr_generator_rejects_a_title_longer_than_forty_characters(): void
+    {
+        Livewire::actingAs($this->admin())->test(GeneratoreQr::class)
+            ->set('titolo', str_repeat('a', 41))
+            ->call('generaLiberi')
+            ->assertHasErrors(['titolo' => 'Il titolo può avere al massimo 40 caratteri.']);
+
+        $this->assertSame(0, DB::table('tc_codici')->count());
+    }
+
+    public function test_qr_generator_rejects_quantities_outside_one_to_twenty(): void
+    {
+        foreach ([0, 21] as $quantita) {
+            Livewire::actingAs($this->admin())->test(GeneratoreQr::class)
+                ->set('quantita', $quantita)
+                ->call('generaLiberi')
+                ->assertHasErrors(['quantita' => 'Indica da 1 a 20 QR da generare.']);
+        }
+
+        $this->assertSame(0, DB::table('tc_codici')->count());
+        $this->assertSame([], Storage::disk($this->disco)->files('protected/documenti/QrcodeText'));
+    }
+
+    public function test_qr_generator_removes_partial_codes_when_image_writing_fails(): void
+    {
+        $qr = new QrSede;
+        $tentativi = 0;
+        $mock = \Mockery::mock(QrSede::class)->makePartial();
+        $mock->shouldReceive('genera')->twice()->andReturnUsing(function (string $codice, string $colore = '#000000', ?string $logo = null, string $titolo = '') use ($qr, &$tentativi): void {
+            if (++$tentativi === 2) {
+                throw new \RuntimeException('Errore di scrittura QR');
+            }
+            $qr->genera($codice);
+        });
+        $this->app->instance(QrSede::class, $mock);
+
+        try {
+            Livewire::actingAs($this->admin())->test(GeneratoreQr::class)
+                ->set('quantita', 2)
+                ->call('generaLiberi');
+            $this->fail("L'errore di scrittura avrebbe dovuto interrompere la generazione.");
+        } catch (\RuntimeException $e) {
+            $this->assertSame('Errore di scrittura QR', $e->getMessage());
+        }
+
+        $this->assertSame(0, DB::table('tc_codici')->count());
+        $this->assertSame([], Storage::disk($this->disco)->files('protected/documenti/QrcodeText'));
     }
 
     public function test_generating_a_qr_does_not_replace_an_existing_file(): void
@@ -440,9 +573,11 @@ class SediSuiteTest extends TestCase
         $postazione = DB::table('tc_postazioni')->first();
         $codiceSede = DB::table('tc_codici')->find($sede->id_codice);
         $codicePostazione = DB::table('tc_codici')->find($postazione->id_codice);
+        $this->assertSame('ITALPOL*000001', $codiceSede->codice);
         $this->assertSame('A', $codiceSede->stato);
         $this->assertSame('S', $codiceSede->tipo);
         $this->assertSame((int) $sede->id, $codiceSede->id_sede);
+        $this->assertSame('ITALPOL*000002', $codicePostazione->codice);
         $this->assertSame('A', $codicePostazione->stato);
         $this->assertSame('P', $codicePostazione->tipo);
         $this->assertSame((int) $postazione->id, $codicePostazione->id_postazione);

@@ -29,9 +29,21 @@
 
             <div x-show="errore" x-cloak class="rounded-xl bg-rose-50 p-4 text-base leading-relaxed text-rose-800 ring-1 ring-rose-200" x-text="errore"></div>
 
-            <button type="button" class="btn-primary min-h-14 w-full !px-5 !py-4 text-base sm:text-lg" x-show="!camera" @click="avvia()" :disabled="caricamento || !{{ $turno ? 'true' : 'false' }}">
-                <span x-show="!caricamento" class="inline-flex items-center justify-center gap-3"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M7 12h10"/></svg> Scansiona il QR</span>
-                <span x-show="caricamento" x-cloak>Invio in corso…</span>
+            <div x-show="codice" x-cloak class="space-y-3 text-left">
+                <label for="nota-scansione" class="block text-sm font-medium text-slate-700">Inserisci note</label>
+                <textarea id="nota-scansione" x-ref="nota" rows="3" maxlength="255" class="input" placeholder="Nota facoltativa"></textarea>
+                @error('nota') <p class="text-sm text-rose-700">{{ $message }}</p> @enderror
+                <div class="flex gap-3">
+                    <button type="button" class="btn-soft min-h-12 flex-1 text-base" @click="annulla()" :disabled="caricamento">Chiudi</button>
+                    <button type="button" class="btn-primary min-h-12 flex-1 text-base" @click="conferma()" :disabled="caricamento">
+                        <span x-show="!caricamento">Invia</span>
+                        <span x-show="caricamento" x-cloak>Invio in corso…</span>
+                    </button>
+                </div>
+            </div>
+
+            <button type="button" class="btn-primary min-h-14 w-full !px-5 !py-4 text-base sm:text-lg" x-show="!camera && !codice" @click="avvia()" :disabled="!{{ $turno ? 'true' : 'false' }}">
+                <span class="inline-flex items-center justify-center gap-3"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M7 12h10"/></svg> Scansiona il QR</span>
             </button>
             <button type="button" class="btn-soft min-h-12 w-full text-base" x-show="camera" x-cloak @click="ferma()">Annulla</button>
 
@@ -66,6 +78,9 @@
                         <p class="mt-1 text-sm text-slate-600">Previsto {{ $turno->inizio->format('H:i') }}</p>
                         @if ($ingresso)
                             <p class="mt-1 text-base text-emerald-700">Timbrato alle {{ $ingresso->rilevata_at->format('H:i') }} · {{ $stato($ingresso->ritardo_minuti) }}</p>
+                            @if ($ingresso->note_operatore)
+                                <p class="mt-1 break-words text-sm text-slate-600">{{ $ingresso->note_operatore }}</p>
+                            @endif
                         @else
                             <p class="mt-1 text-sm text-slate-500">In attesa di timbratura</p>
                         @endif
@@ -75,6 +90,9 @@
                             <span class="absolute -left-[33px] h-4 w-4 rounded-full bg-sky-400 ring-4 ring-white"></span>
                             <p class="break-words text-base font-medium text-slate-700">{{ $p->postazione?->titolo ?? 'Passaggio' }}</p>
                             <p class="mt-1 text-sm text-slate-600">{{ $p->rilevata_at->format('H:i') }}@if ($p->ritardo_minuti !== null) · {{ $stato($p->ritardo_minuti) }}@endif</p>
+                            @if ($p->note_operatore)
+                                <p class="mt-1 break-words text-sm text-slate-600">{{ $p->note_operatore }}</p>
+                            @endif
                         </li>
                     @endforeach
                     <li class="relative">
@@ -83,6 +101,9 @@
                         <p class="mt-1 text-sm text-slate-600">Prevista {{ $turno->fine->format('H:i') }}</p>
                         @if ($uscita)
                             <p class="mt-1 text-base text-emerald-700">Timbrata alle {{ $uscita->rilevata_at->format('H:i') }} · {{ $stato($uscita->ritardo_minuti) }}</p>
+                            @if ($uscita->note_operatore)
+                                <p class="mt-1 break-words text-sm text-slate-600">{{ $uscita->note_operatore }}</p>
+                            @endif
                         @else
                             <p class="mt-1 text-sm text-slate-500">{{ $ingresso ? 'Turno in corso' : 'Dopo l\'ingresso' }}</p>
                         @endif

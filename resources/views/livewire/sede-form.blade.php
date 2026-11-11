@@ -35,13 +35,14 @@
         <section x-show="tab === 'dati'" class="card p-5 sm:p-6">
             <h2 class="mb-4 text-base font-bold text-slate-800">Dati sede</h2>
             <div class="grid gap-4 sm:grid-cols-2">
-                <x-ui.field label="{{ $sedeId ? 'Qrcode associato' : 'Associa Qrcode' }}" name="codiceSedeId">
+                <x-ui.field label="{{ $sedeId ? 'Qrcode associato' : 'Associa Qrcode' }}" name="codiceSedeId" class="sm:col-span-2">
                     <x-select-ricerca
                         model="codiceSedeId"
                         :options="collect($codiciSede)->map(fn ($codice, $id) => ['id' => (string) $id, 'label' => $codice])->values()"
                         placeholder="— Seleziona —"
                         :empty-value="''"
                     />
+                    <p class="mt-1 text-xs text-slate-500">Elenco dei codici liberi, in ordine di numerazione. Se non ce ne sono, «CODICE DA GENERARE» assegna il numero successivo.</p>
                 </x-ui.field>
                 <x-ui.field label="Distanza massima scansione" name="f.distanza_max">
                     <div class="relative"><input type="number" wire:model.live.debounce.400ms="f.distanza_max" class="input !pr-10"><span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-slate-400">m</span></div>

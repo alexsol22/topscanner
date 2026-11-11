@@ -13,7 +13,7 @@ use Illuminate\Support\Carbon;
 
 class InviaProgrammazione extends Command
 {
-    protected $signature = 'notifiche:programmazione {--prova-sicura : Limita la prova all’operatore autorizzato, senza SMS né modifiche}';
+    protected $signature = 'notifiche:programmazione {--prova-sicura : Limita la prova all’operatore e al cliente autorizzati: mail solo a lui, senza SMS né modifiche}';
 
     protected $description = 'Invia agli admin il riepilogo ore richieste/programmate per cliente e sede nei prossimi 7 giorni';
 
@@ -23,15 +23,17 @@ class InviaProgrammazione extends Command
     {
         $giorni = collect(range(0, 6))->map(fn (int $n) => today()->addDays($n));
 
-        if ($this->option('prova-sicura')) {
-            $idProva = $prova->attiva($comunicazioni);
+        $contesto = $prova->contesto($comunicazioni, (bool) $this->option('prova-sicura'));
+
+        if ($contesto !== null) {
             $turni = Turno::query()
-                ->where('id_operatore', $idProva)
+                ->where('id_operatore', $contesto['operatore'])
+                ->where('id_cliente', $contesto['cliente'])
                 ->whereBetween('data_inizio', [$giorni->first()->toDateString(), $giorni->last()->toDateString()])
                 ->orderBy('data_inizio')
                 ->orderBy('ora_inizio')
                 ->get();
-            $corpo = '<p>Programmazione dei soli turni dell’operatore di prova.</p>';
+            $corpo = '<p>Programmazione dei soli turni dell’operatore di prova per il cliente prova.</p>';
 
             foreach ($turni as $turno) {
                 $corpo .= '<p>'.e($turno->data_inizio->format('d-m-Y')).' '.e($turno->ora_inizio).' - '.e($turno->ora_fine).'</p>';
@@ -42,7 +44,7 @@ class InviaProgrammazione extends Command
             }
 
             $oggetto = 'Programmazione '.$giorni->first()->format('d-m-Y').' - '.$giorni->last()->format('d-m-Y');
-            $comunicazioni->invia([ProvaNotifiche::EMAIL => 'Prova'], $oggetto, $corpo, $idProva);
+            $comunicazioni->invia([ProvaNotifiche::EMAIL => 'Prova'], $oggetto, $corpo, $contesto['operatore']);
             $this->info('Programmazione di prova inviata a 1 destinatario');
 
             return self::SUCCESS;

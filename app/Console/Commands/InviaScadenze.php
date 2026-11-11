@@ -10,13 +10,13 @@ use Illuminate\Support\Facades\DB;
 
 class InviaScadenze extends Command
 {
-    protected $signature = 'notifiche:scadenze {--prova-sicura : Limita la prova all’operatore autorizzato, senza SMS né modifiche}';
+    protected $signature = 'notifiche:scadenze {--prova-sicura : Limita la prova all’operatore e al cliente autorizzati: mail solo a lui, senza SMS né modifiche}';
 
     protected $description = 'Invia agli admin le scadenze di certificati (modello 4) e le riconsegne materiale (modello 5)';
 
     public function handle(Comunicazioni $comunicazioni, ProvaNotifiche $prova): int
     {
-        $idProva = $this->option('prova-sicura') ? $prova->attiva($comunicazioni) : null;
+        $idProva = $prova->contesto($comunicazioni, (bool) $this->option('prova-sicura'))['operatore'] ?? null;
         $this->info('Scadenze certificati: '.$this->inviaRiepilogo($comunicazioni, Messaggio::find(4), fn ($limite) => $this->certificati($limite, $idProva), $idProva));
         $this->info('Riconsegne materiale: '.$this->inviaRiepilogo($comunicazioni, Messaggio::find(5), fn ($limite) => $this->materiali($limite, $idProva), $idProva));
 

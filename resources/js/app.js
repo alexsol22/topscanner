@@ -43,7 +43,7 @@ collegaSelect2Qr();
 document.addEventListener('alpine:init', () => {
     window.Alpine.data('scanner', () => ({
         camera: false, stream: null, caricamento: false, errore: null,
-        gps: 'attesa', lat: null, lng: null, ultimo: 0,
+        gps: 'attesa', lat: null, lng: null, codice: null,
 
         init() { this.posizione(); },
 
@@ -56,10 +56,21 @@ document.addEventListener('alpine:init', () => {
                 { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 });
         },
 
-        async invia(codice) {
+        async conferma() {
+            if (!this.codice || this.caricamento) return;
             this.caricamento = true;
-            try { await this.$wire.timbra(codice, this.lat, this.lng); }
-            finally { this.caricamento = false; }
+            this.errore = null;
+            try {
+                await this.$wire.timbra(this.codice, this.lat, this.lng, false, this.$refs.nota?.value ?? '');
+                this.codice = null;
+                if (this.$refs.nota) this.$refs.nota.value = '';
+            } catch {
+            } finally { this.caricamento = false; }
+        },
+
+        annulla() {
+            this.codice = null;
+            if (this.$refs.nota) this.$refs.nota.value = '';
         },
 
         async avvia() {
@@ -99,11 +110,10 @@ document.addEventListener('alpine:init', () => {
                         valore = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' })?.data ?? null;
                     }
                 }
-                if (valore && Date.now() - this.ultimo > 3000) {
-                    this.ultimo = Date.now();
+                if (valore && !this.codice) {
                     this.ferma();
                     navigator.vibrate?.(80);
-                    await this.invia(valore);
+                    this.codice = valore;
                     return;
                 }
                 requestAnimationFrame(passo);

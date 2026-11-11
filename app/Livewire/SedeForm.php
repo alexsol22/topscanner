@@ -367,7 +367,7 @@ class SedeForm extends Component
 
         try {
             if ($this->codiceSedeId === 'XX') {
-                $codice = Codice::generaCodice();
+                $codice = Codice::prossimoCodice($generati);
                 $qr->genera($codice);
                 $generati[] = $codice;
                 $risultato['sede'] = $codice;
@@ -378,10 +378,7 @@ class SedeForm extends Component
                     continue;
                 }
 
-                do {
-                    $codice = Codice::generaCodice();
-                } while (in_array($codice, $generati, true));
-
+                $codice = Codice::prossimoCodice($generati);
                 $qr->genera($codice);
                 $generati[] = $codice;
                 $risultato['postazioni'][$chiave] = $codice;

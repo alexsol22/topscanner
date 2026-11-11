@@ -56,10 +56,15 @@ class NotificheSmsTest extends TestCase
             $table->increments('id');
             $table->string('sigla')->nullable();
         });
+        Schema::create('tc_clienti', function (Blueprint $table): void {
+            $table->increments('id');
+            $table->string('ragione_sociale')->nullable();
+        });
         Schema::create('tc_turni', function (Blueprint $table): void {
             $table->increments('id');
             $table->unsignedInteger('id_sede')->nullable();
             $table->unsignedInteger('id_operatore')->nullable();
+            $table->unsignedInteger('id_cliente')->nullable();
             $table->date('data_inizio')->nullable();
             $table->date('data_fine')->nullable();
             $table->string('ora_inizio')->nullable();
@@ -149,11 +154,12 @@ class NotificheSmsTest extends TestCase
         });
 
         DB::table('tc_admin')->insert(['id' => 1, 'nome' => 'Mario', 'cognome' => 'Rossi', 'email' => 'mario@example.com', 'cellulare' => '+39333', 'codice' => 'OP1']);
+        DB::table('tc_clienti')->insert(['id' => 1, 'ragione_sociale' => 'Prova']);
         DB::table('_comuni')->insert(['id' => 1, 'comune' => 'Torino']);
         DB::table('_provincia')->insert(['id' => 1, 'sigla' => 'TO']);
         DB::table('tc_sedi')->insert(['id' => 1, 'descrizione' => 'Sede Nord', 'indirizzo' => 'Via Roma 1', 'cap' => '10100', 'citta_id' => 1, 'provincia_id' => 1]);
         DB::table('tc_turni')->insert([
-            'id' => 1, 'id_sede' => 1, 'id_operatore' => 1,
+            'id' => 1, 'id_sede' => 1, 'id_operatore' => 1, 'id_cliente' => 1,
             'data_inizio' => '2026-11-06', 'data_fine' => '2026-11-06', 'ora_inizio' => '08:00', 'ora_fine' => '16:00',
         ]);
     }
@@ -270,43 +276,61 @@ class NotificheSmsTest extends TestCase
         DB::table('tc_admin')->where('id', 1)->update(['email' => ProvaNotifiche::EMAIL]);
         DB::table('tc_admin')->insert(['id' => 2, 'nome' => 'Altro', 'email' => 'altro@example.com', 'cellulare' => '+39444']);
         DB::table('tc_turni')->where('id', 1)->update(['ora_inizio' => '11:00']);
-        DB::table('tc_turni')->insert(['id' => 2, 'id_operatore' => 2, 'data_inizio' => '2026-11-06', 'ora_inizio' => '11:00']);
-        $this->messaggio(['id' => 1, 'ore' => 2]);
+        DB::table('tc_clienti')->insert(['id' => 2, 'ragione_sociale' => 'Reale']);
+        DB::table('tc_sedi')->insert(['id' => 2, 'descrizione' => 'Sede Reale']);
+        DB::table('tc_turni')->insert([
+            ['id' => 2, 'id_operatore' => 2, 'id_cliente' => 1, 'id_sede' => 1, 'data_inizio' => '2026-11-06', 'ora_inizio' => '11:00'],
+            ['id' => 3, 'id_operatore' => 1, 'id_cliente' => 2, 'id_sede' => 2, 'data_inizio' => '2026-11-06', 'ora_inizio' => '11:00'],
+        ]);
+        $this->messaggio(['id' => 1, 'ore' => 2, 'modello_email' => 'Ciao [OPERATORE] [SEDE]']);
 
         $this->artisan('notifiche:avviso-turni', ['--prova-sicura' => true])->assertSuccessful();
 
         Mail::assertSent(NotificaHtml::class, 1);
         Mail::assertSent(NotificaHtml::class, fn (NotificaHtml $mail) => $mail->hasTo(ProvaNotifiche::EMAIL)
             && str_contains($mail->corpoHtml, 'Rossi Mario')
+            && str_contains($mail->corpoHtml, 'Sede Nord')
             && ! str_contains($mail->corpoHtml, 'Altro'));
+        Mail::assertNotSent(NotificaHtml::class, fn (NotificaHtml $mail) => str_contains($mail->corpoHtml, 'Sede Reale'));
         Http::assertNothingSent();
         $this->assertSame(0, DB::table('tc_email')->count());
         $this->assertSame(0, DB::table('tc_send_sms')->count());
     }
 
-    public function test_prova_ritardi_non_modifica_ritardi_o_coda_e_non_invia_sms(): void
+    public function test_prova_ritardi_segna_ritardo_e_coda_senza_sms_ne_altri_destinatari(): void
     {
         config(['sms.enabled' => true]);
         Http::fake();
         DB::table('tc_admin')->where('id', 1)->update(['email' => ProvaNotifiche::EMAIL]);
         DB::table('tc_admin')->insert(['id' => 2, 'nome' => 'Altro', 'email' => 'altro@example.com', 'cellulare' => '+39444']);
-        DB::table('tc_turni')->insert(['id' => 2, 'id_operatore' => 2, 'data_inizio' => '2026-11-06', 'ora_inizio' => '08:00']);
+        DB::table('tc_clienti')->insert(['id' => 2, 'ragione_sociale' => 'Reale']);
+        DB::table('tc_sedi')->insert(['id' => 2, 'descrizione' => 'Sede Reale']);
+        DB::table('tc_turni')->insert([
+            ['id' => 2, 'id_operatore' => 2, 'id_cliente' => 1, 'id_sede' => 1, 'data_inizio' => '2026-11-06', 'ora_inizio' => '08:00'],
+            ['id' => 3, 'id_operatore' => 1, 'id_cliente' => 2, 'id_sede' => 2, 'data_inizio' => '2026-11-06', 'ora_inizio' => '08:00'],
+        ]);
         DB::table('tc_send_email')->insert([
             ['id' => 1, 'email' => ProvaNotifiche::EMAIL, 'id_operatore' => 1, 'testo' => 'Coda prova', 'sent' => 'N'],
             ['id' => 2, 'email' => 'altro@example.com', 'id_operatore' => 2, 'testo' => 'Coda altra', 'sent' => 'N'],
             ['id' => 3, 'email' => 'altro@example.com', 'id_operatore' => 1, 'testo' => 'Destinatario diverso', 'sent' => 'N'],
         ]);
-        $this->messaggio(['id' => 2]);
+        $this->messaggio(['id' => 2, 'modello_email' => 'Ciao [OPERATORE] [SEDE]']);
 
+        $this->artisan('notifiche:ritardi', ['--prova-sicura' => true])->assertSuccessful();
         $this->artisan('notifiche:ritardi', ['--prova-sicura' => true])->assertSuccessful();
 
         Mail::assertSent(NotificaHtml::class, 2);
         Mail::assertSent(NotificaHtml::class, fn (NotificaHtml $mail) => $mail->hasTo(ProvaNotifiche::EMAIL) && $mail->corpoHtml === 'Coda prova');
-        Mail::assertSent(NotificaHtml::class, fn (NotificaHtml $mail) => $mail->hasTo(ProvaNotifiche::EMAIL) && str_contains($mail->corpoHtml, 'Rossi Mario'));
+        Mail::assertSent(NotificaHtml::class, fn (NotificaHtml $mail) => $mail->hasTo(ProvaNotifiche::EMAIL)
+            && str_contains($mail->corpoHtml, 'Rossi Mario')
+            && str_contains($mail->corpoHtml, 'Sede Nord'));
+        Mail::assertNotSent(NotificaHtml::class, fn (NotificaHtml $mail) => str_contains($mail->corpoHtml, 'Sede Reale'));
         Http::assertNothingSent();
-        $this->assertSame(0, DB::table('tc_ritardi')->count());
+        $this->assertSame(1, (int) DB::table('tc_ritardi')->where('id_turno', 1)->value('inizio'));
+        $this->assertSame(1, DB::table('tc_ritardi')->count());
         $this->assertSame(0, DB::table('tc_email')->count());
-        $this->assertSame(3, DB::table('tc_send_email')->where('sent', 'N')->count());
+        $this->assertSame('Y', DB::table('tc_send_email')->where('id', 1)->value('sent'));
+        $this->assertSame(2, DB::table('tc_send_email')->where('sent', 'N')->count());
     }
 
     public function test_prova_scadenze_include_solo_documenti_e_materiali_dell_operatore(): void
@@ -363,14 +387,19 @@ class NotificheSmsTest extends TestCase
     public function test_prova_programmazione_mostra_solo_i_turni_dell_operatore(): void
     {
         DB::table('tc_admin')->where('id', 1)->update(['email' => ProvaNotifiche::EMAIL]);
-        DB::table('tc_turni')->insert(['id' => 2, 'id_operatore' => 2, 'data_inizio' => '2026-11-06', 'ora_inizio' => '12:34', 'ora_fine' => '13:34']);
+        DB::table('tc_clienti')->insert(['id' => 2, 'ragione_sociale' => 'Reale']);
+        DB::table('tc_turni')->insert([
+            ['id' => 2, 'id_operatore' => 2, 'id_cliente' => 1, 'data_inizio' => '2026-11-06', 'ora_inizio' => '12:34', 'ora_fine' => '13:34'],
+            ['id' => 3, 'id_operatore' => 1, 'id_cliente' => 2, 'data_inizio' => '2026-11-06', 'ora_inizio' => '15:45', 'ora_fine' => '16:45'],
+        ]);
 
         $this->artisan('notifiche:programmazione', ['--prova-sicura' => true])->assertSuccessful();
 
         Mail::assertSent(NotificaHtml::class, 1);
         Mail::assertSent(NotificaHtml::class, fn (NotificaHtml $mail) => $mail->hasTo(ProvaNotifiche::EMAIL)
             && str_contains($mail->corpoHtml, '08:00 - 16:00')
-            && ! str_contains($mail->corpoHtml, '12:34'));
+            && ! str_contains($mail->corpoHtml, '12:34')
+            && ! str_contains($mail->corpoHtml, '15:45'));
         $this->assertSame(0, DB::table('tc_email')->count());
     }
 
@@ -392,6 +421,41 @@ class NotificheSmsTest extends TestCase
         }
 
         $this->fail('La prova deve interrompersi quando l’operatore non è univoco.');
+    }
+
+    public function test_prova_non_parte_se_il_cliente_non_e_univoco(): void
+    {
+        DB::table('tc_admin')->where('id', 1)->update(['email' => ProvaNotifiche::EMAIL]);
+        DB::table('tc_clienti')->insert(['id' => 2, 'ragione_sociale' => 'prova']);
+
+        try {
+            $this->artisan('notifiche:avviso-turni', ['--prova-sicura' => true])->run();
+        } catch (\RuntimeException $exception) {
+            $this->assertStringContainsString('esattamente un cliente', $exception->getMessage());
+            Mail::assertNothingSent();
+
+            return;
+        }
+
+        $this->fail('La prova deve interrompersi quando il cliente non è univoco.');
+    }
+
+    public function test_con_prova_di_default_lavviso_senza_flag_arriva_solo_all_operatore_autorizzato(): void
+    {
+        config(['notifiche.prova' => true, 'sms.enabled' => true]);
+        Http::fake();
+        DB::table('tc_admin')->where('id', 1)->update(['email' => ProvaNotifiche::EMAIL]);
+        DB::table('tc_admin')->insert(['id' => 2, 'nome' => 'Altro', 'email' => 'altro@example.com', 'cellulare' => '+39444']);
+        DB::table('tc_turni')->where('id', 1)->update(['ora_inizio' => '11:00']);
+        DB::table('tc_turni')->insert(['id' => 2, 'id_operatore' => 2, 'id_cliente' => 1, 'data_inizio' => '2026-11-06', 'ora_inizio' => '11:00']);
+        $this->messaggio(['id' => 1, 'ore' => 2]);
+
+        $this->artisan('notifiche:avviso-turni')->assertSuccessful();
+
+        Mail::assertSent(NotificaHtml::class, 1);
+        Mail::assertSent(NotificaHtml::class, fn (NotificaHtml $mail) => $mail->hasTo(ProvaNotifiche::EMAIL));
+        Mail::assertNotSent(NotificaHtml::class, fn (NotificaHtml $mail) => $mail->hasTo('altro@example.com'));
+        Http::assertNothingSent();
     }
 
     public function test_sms_con_errore_del_provider_viene_registrato_come_non_inviato(): void

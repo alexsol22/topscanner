@@ -488,7 +488,7 @@ class Turni extends Component
                 'sede.cliente',
                 'presenze' => fn ($query) => $query->whereIn('tipo', [Gda::INIZIO, Gda::FINE])->orderBy('data')->orderBy('orario'),
             ]))
-                ->orderBy('data_inizio')->orderBy('ora_inizio')->paginate(15);
+                ->orderByDesc('data_inizio')->orderBy('ora_inizio')->paginate(15);
         }
         $calendario = $this->vista === 'lista' ? null : $this->calendario();
 
