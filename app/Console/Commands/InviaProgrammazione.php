@@ -13,6 +13,8 @@ use Illuminate\Support\Carbon;
 
 class InviaProgrammazione extends Command
 {
+    use DiarioCron;
+
     protected $signature = 'notifiche:programmazione {--prova-sicura : Limita la prova all’operatore e al cliente autorizzati: mail solo a lui, senza SMS né modifiche}';
 
     protected $description = 'Invia agli admin il riepilogo ore richieste/programmate per cliente e sede nei prossimi 7 giorni';
@@ -22,6 +24,12 @@ class InviaProgrammazione extends Command
     public function handle(Comunicazioni $comunicazioni, ProvaNotifiche $prova): int
     {
         $giorni = collect(range(0, 6))->map(fn (int $n) => today()->addDays($n));
+
+        $this->diario('Avvio programmazione', [
+            'prova_sicura' => (bool) $this->option('prova-sicura'),
+            'dal' => $giorni->first()->toDateString(),
+            'al' => $giorni->last()->toDateString(),
+        ]);
 
         $contesto = $prova->contesto($comunicazioni, (bool) $this->option('prova-sicura'));
 
@@ -37,6 +45,14 @@ class InviaProgrammazione extends Command
 
             foreach ($turni as $turno) {
                 $corpo .= '<p>'.e($turno->data_inizio->format('d-m-Y')).' '.e($turno->ora_inizio).' - '.e($turno->ora_fine).'</p>';
+                $this->diario('Turno di prova in programmazione', [
+                    'turno' => (int) $turno->id,
+                    'operatore' => (int) $turno->id_operatore,
+                    'cliente' => (int) $turno->id_cliente,
+                    'giorno' => $turno->data_inizio->toDateString(),
+                    'ora_inizio' => (string) $turno->ora_inizio,
+                    'ora_fine' => (string) $turno->ora_fine,
+                ]);
             }
 
             if ($turni->isEmpty()) {
@@ -45,7 +61,12 @@ class InviaProgrammazione extends Command
 
             $oggetto = 'Programmazione '.$giorni->first()->format('d-m-Y').' - '.$giorni->last()->format('d-m-Y');
             $comunicazioni->invia([ProvaNotifiche::EMAIL => 'Prova'], $oggetto, $corpo, $contesto['operatore']);
-            $this->info('Programmazione di prova inviata a 1 destinatario');
+            $this->diario('Programmazione di prova inviata', [
+                'operatore' => $contesto['operatore'],
+                'cliente' => $contesto['cliente'],
+                'turni' => $turni->count(),
+                'email' => ProvaNotifiche::EMAIL,
+            ]);
 
             return self::SUCCESS;
         }
@@ -60,6 +81,12 @@ class InviaProgrammazione extends Command
         $corpo = '';
 
         foreach (Cliente::with('sedi')->get() as $cliente) {
+            $this->diario('Programmazione cliente inclusa', [
+                'cliente' => (int) $cliente->id,
+                'ragione_sociale' => (string) $cliente->ragione_sociale,
+                'sedi' => $cliente->sedi->count(),
+            ]);
+
             $corpo .= "<p><div> Cliente <b>{$cliente->ragione_sociale}</b> </div>";
 
             if ($cliente->sedi->isEmpty()) {
@@ -89,7 +116,13 @@ class InviaProgrammazione extends Command
         $messaggio = '<p>Buongiorno</p><p>Qui di seguito la situazione della programmazione della settimana in corso</p>'.$corpo;
 
         $inviate = $comunicazioni->invia($destinatari, $oggetto, $messaggio);
-        $this->info("Programmazione inviata a {$inviate} destinatari");
+        $this->diario('Programmazione inviata', [
+            'destinatari' => count($destinatari),
+            'email_inviate' => $inviate,
+            'indirizzi' => implode(', ', array_keys($destinatari)),
+            'dal' => $giorni->first()->toDateString(),
+            'al' => $giorni->last()->toDateString(),
+        ]);
 
         return self::SUCCESS;
     }

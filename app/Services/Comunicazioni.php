@@ -116,22 +116,49 @@ class Comunicazioni
      * Come nei job Yii: SMS all'operatore e poi a ogni numero di admin_sms del modello (solo se invia_sms è attivo).
      *
      * @param  array<string, mixed>  $dati
+     * @return array{inviati: int, falliti: int, motivo: string|null}
      */
-    public function inviaSms(Messaggio $config, array $dati, ?string $cellulare, int $idOperatore): void
+    public function inviaSms(Messaggio $config, array $dati, ?string $cellulare, int $idOperatore): array
     {
-        if ($this->destinatarioProva !== null || ! $config->invia_sms || ! $cellulare) {
-            return;
+        if ($this->destinatarioProva !== null) {
+            return ['inviati' => 0, 'falliti' => 0, 'motivo' => 'prova sicura'];
+        }
+
+        if (! $config->invia_sms) {
+            return ['inviati' => 0, 'falliti' => 0, 'motivo' => 'sms disattivati sul modello'];
+        }
+
+        if ($cellulare === null || trim($cellulare) === '') {
+            return ['inviati' => 0, 'falliti' => 0, 'motivo' => 'operatore senza cellulare'];
         }
 
         $sms = $this->sms ??= app(Sms::class);
+
+        if (! $sms->abilitato()) {
+            return ['inviati' => 0, 'falliti' => 0, 'motivo' => 'invio SMS disattivato'];
+        }
+
         $testo = $this->testo($config->modello_sms, $dati);
         $mittente = (string) $config->mittente;
-
-        $sms->invia($cellulare, $testo, $mittente, $idOperatore);
+        $numeri = [trim($cellulare)];
 
         foreach (explode(',', (string) $config->admin_sms) as $numero) {
-            $sms->invia($numero, $testo, $mittente, $idOperatore);
+            $numero = trim($numero);
+
+            if ($numero !== '') {
+                $numeri[] = $numero;
+            }
         }
+
+        $inviati = 0;
+
+        foreach ($numeri as $numero) {
+            if ($sms->invia($numero, $testo, $mittente, $idOperatore)) {
+                $inviati++;
+            }
+        }
+
+        return ['inviati' => $inviati, 'falliti' => count($numeri) - $inviati, 'motivo' => null];
     }
 
     /** Come MyEmailsNative::sendEmailAccessi: credenziali provvisorie di un nuovo account (non registrate in tc_email per non salvare la password). */

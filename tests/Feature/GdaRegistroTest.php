@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Livewire\Presenze;
 use App\Models\User;
+use DOMDocument;
+use DOMXPath;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -151,13 +153,23 @@ class GdaRegistroTest extends TestCase
 
     public function test_dettaglio_passaggi_del_turno(): void
     {
-        Livewire::actingAs($this->admin())->test(Presenze::class)
+        $componente = Livewire::actingAs($this->admin())->test(Presenze::class)
             ->set('da', '2026-11-01')->set('a', '2026-11-30')
             ->assertDontSee('Passaggi postazioni')
+            ->assertSee('Visualizza 1 passaggio')
+            ->assertDontSee('Passaggi (')
             ->call('mostraPassaggi', 1)
             ->assertSee('Passaggi postazioni — Sede Uno')
-            ->assertSee('3 Min')
-            ->call('chiudiPassaggi')
+            ->assertSee('3 Min');
+
+        $documento = new DOMDocument;
+        libxml_use_internal_errors(true);
+        $documento->loadHTML($componente->html());
+        $radice = (new DOMXPath($documento))->query('//*[@*[local-name()="wire:id"]]')->item(0);
+        $dettaglio = (new DOMXPath($documento))->query('.//*[@role="dialog" and starts-with(@aria-label, "Passaggi postazioni")]', $radice);
+        $this->assertSame(1, $dettaglio->length);
+
+        $componente->call('chiudiPassaggi')
             ->assertDontSee('Passaggi postazioni');
     }
 

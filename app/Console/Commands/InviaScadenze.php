@@ -10,23 +10,41 @@ use Illuminate\Support\Facades\DB;
 
 class InviaScadenze extends Command
 {
+    use DiarioCron;
+
     protected $signature = 'notifiche:scadenze {--prova-sicura : Limita la prova all’operatore e al cliente autorizzati: mail solo a lui, senza SMS né modifiche}';
 
     protected $description = 'Invia agli admin le scadenze di certificati (modello 4) e le riconsegne materiale (modello 5)';
 
     public function handle(Comunicazioni $comunicazioni, ProvaNotifiche $prova): int
     {
+        $this->diario('Avvio scadenze', [
+            'prova_sicura' => (bool) $this->option('prova-sicura'),
+        ]);
+
         $idProva = $prova->contesto($comunicazioni, (bool) $this->option('prova-sicura'))['operatore'] ?? null;
-        $this->info('Scadenze certificati: '.$this->inviaRiepilogo($comunicazioni, Messaggio::find(4), fn ($limite) => $this->certificati($limite, $idProva), $idProva));
-        $this->info('Riconsegne materiale: '.$this->inviaRiepilogo($comunicazioni, Messaggio::find(5), fn ($limite) => $this->materiali($limite, $idProva), $idProva));
+        $certificati = $this->inviaRiepilogo($comunicazioni, Messaggio::find(4), 'certificati', fn ($limite) => $this->certificati($limite, $idProva), $idProva);
+        $materiali = $this->inviaRiepilogo($comunicazioni, Messaggio::find(5), 'materiali', fn ($limite) => $this->materiali($limite, $idProva), $idProva);
+
+        $this->diario('Scadenze completate', [
+            'prova' => $idProva !== null,
+            'operatore' => $idProva,
+            'certificati' => $certificati,
+            'materiali' => $materiali,
+        ]);
 
         return self::SUCCESS;
     }
 
     /** @param  callable(string): iterable<object>  $righe */
-    private function inviaRiepilogo(Comunicazioni $comunicazioni, ?Messaggio $config, callable $righe, ?int $idProva): int
+    private function inviaRiepilogo(Comunicazioni $comunicazioni, ?Messaggio $config, string $tipo, callable $righe, ?int $idProva): int
     {
         if (! $config?->invia_email) {
+            $this->diarioAttenzione('Riepilogo scadenze saltato', [
+                'tipo' => $tipo,
+                'motivo' => $config === null ? 'modello assente' : 'email disattivate',
+            ]);
+
             return 0;
         }
 
@@ -39,10 +57,25 @@ class InviaScadenze extends Command
         }
 
         if ($testi === [] || $destinatari === []) {
+            $this->diario('Riepilogo scadenze senza invio', [
+                'tipo' => $tipo,
+                'limite' => $limite,
+                'righe' => count($testi),
+                'destinatari' => count($destinatari),
+            ]);
+
             return 0;
         }
 
-        $comunicazioni->invia($destinatari, (string) $config->oggetto, implode('<br>', $testi));
+        $inviate = $comunicazioni->invia($destinatari, (string) $config->oggetto, implode('<br>', $testi));
+
+        $this->diario('Riepilogo scadenze inviato', [
+            'tipo' => $tipo,
+            'limite' => $limite,
+            'righe' => count($testi),
+            'email_inviate' => $inviate,
+            'destinatari' => implode(', ', array_keys($destinatari)),
+        ]);
 
         return count($testi);
     }

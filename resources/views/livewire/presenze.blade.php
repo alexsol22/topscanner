@@ -2,6 +2,7 @@
     $staff = auth()->user()->isStaff();
 @endphp
 
+<div>
 @if ($vista === 'gda')
     <div class="space-y-6">
         <section class="flex flex-col gap-4 rounded-3xl border border-sky-100 bg-gradient-to-br from-white to-sky-50/80 p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-6">
@@ -91,7 +92,7 @@
                                 <th class="th">Ore Previste</th>
                                 <th class="th">Ore Lavorate</th>
                                 <th class="th">Note Operatore</th>
-                                <th class="th">Passaggi</th>
+                                <th class="th text-center">Passaggi</th>
                                 @if ($staff)<th class="th">Distanza</th>@endif
                             </tr>
                         </thead>
@@ -117,9 +118,16 @@
                                             @endif
                                         @endforeach
                                     </td>
-                                    <td class="td">
+                                    <td class="td text-center">
                                         @if ($passaggi->isNotEmpty())
-                                            <button type="button" wire:click="mostraPassaggi({{ $t->id }})" class="btn-soft !px-3 !py-1.5" title="Visualizza passaggi">Passaggi ({{ $passaggi->count() }})</button>
+                                            @php
+                                                $numeroPassaggi = $passaggi->count();
+                                                $etichettaPassaggi = $numeroPassaggi === 1 ? '1 passaggio' : $numeroPassaggi.' passaggi';
+                                            @endphp
+                                            <button type="button" wire:click="mostraPassaggi({{ $t->id }})" title="Visualizza {{ $etichettaPassaggi }}" aria-label="Visualizza {{ $etichettaPassaggi }}" class="btn-soft !gap-1 !px-2 !py-1.5">
+                                                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="6" cy="12" r="2"/><circle cx="16" cy="7" r="2"/><circle cx="16" cy="17" r="2"/><path stroke-linecap="round" d="M8 11.2 14.2 8.2M8 12.8l6.2 3"/></svg>
+                                                <span>{{ $numeroPassaggi }}</span>
+                                            </button>
                                         @endif
                                     </td>
                                     @if ($staff)<td class="td whitespace-nowrap">{{ $inizioGda && $inizioGda->distanza > 0 ? $inizioGda->distanza.' Km' : '' }}</td>@endif
@@ -275,3 +283,4 @@
         @endif
     </div>
 @endif
+</div>

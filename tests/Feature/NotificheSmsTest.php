@@ -6,15 +6,21 @@ use App\Mail\NotificaHtml;
 use App\Services\ProvaNotifiche;
 use App\Services\Sms;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
+use Monolog\Handler\NullHandler;
 use Tests\TestCase;
 
 class NotificheSmsTest extends TestCase
 {
+    /** @var list<MessageLogged> */
+    private array $diario = [];
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -497,5 +503,264 @@ class NotificheSmsTest extends TestCase
         $this->post('/sms/consegna', ['psw' => '', 'id_send' => 1])->assertForbidden();
 
         $this->assertSame(0, DB::table('tc_send_sms_delivery')->count());
+    }
+
+    public function test_ritardi_a_mezzanotte_restano_nel_diario_senza_elaborare(): void
+    {
+        Carbon::setTestNow('2026-11-06 00:10:00');
+        $this->messaggio(['id' => 2]);
+        $this->ascoltaDiario();
+
+        $this->artisan('notifiche:ritardi')
+            ->expectsOutputToContain('Ritardi saltati: a mezzanotte non si elabora nulla')
+            ->assertSuccessful();
+
+        $this->assertSame('warning', $this->voceDiario('Ritardi saltati: a mezzanotte non si elabora nulla')->level);
+        $this->assertSame(['comando' => 'notifiche:ritardi'], $this->voceDiario('Ritardi saltati: a mezzanotte non si elabora nulla')->context);
+        $this->assertSame(0, DB::table('tc_ritardi')->count());
+    }
+
+    public function test_ritardi_registrano_coda_turni_notificati_e_turni_saltati(): void
+    {
+        $this->messaggio(['id' => 2]);
+        $this->messaggio(['id' => 3]);
+        DB::table('tc_turni')->insert([
+            ['id' => 2, 'id_sede' => 1, 'id_operatore' => 1, 'id_cliente' => 1, 'data_inizio' => '2026-11-06', 'data_fine' => '2026-11-06', 'ora_inizio' => '08:00', 'ora_fine' => '16:00'],
+            ['id' => 3, 'id_sede' => 1, 'id_operatore' => 1, 'id_cliente' => 1, 'data_inizio' => '2026-11-06', 'data_fine' => '2026-11-06', 'ora_inizio' => '08:00', 'ora_fine' => '16:00'],
+        ]);
+        DB::table('tc_gda')->insert(['id_turno' => 2, 'tipo' => 'I']);
+        DB::table('tc_ritardi')->insert(['id_turno' => 3, 'id_operatore' => 1, 'inizio' => 1, 'fine' => 0]);
+        DB::table('tc_send_email')->insert([
+            'id' => 9, 'email' => 'mario@example.com', 'nome' => 'Rossi Mario', 'id_operatore' => 1, 'testo' => 'Coda', 'sent' => 'N',
+        ]);
+        $this->ascoltaDiario();
+
+        $this->artisan('notifiche:ritardi')->expectsOutputToContain('Ritardo notificato')->assertSuccessful();
+
+        $this->assertSame([
+            'comando' => 'notifiche:ritardi',
+            'id' => 9,
+            'operatore' => 1,
+            'email' => 'mario@example.com',
+            'inviate' => 1,
+        ], $this->voceDiario('Comunicazione in coda inviata')->context);
+        $this->assertSame([
+            'comando' => 'notifiche:ritardi',
+            'tipo' => 'I',
+            'giorno' => '2026-11-06',
+            'ora_limite' => '08:51',
+            'turni' => 3,
+        ], $this->voceDiario('Controllo ritardi', ['tipo' => 'I'])->context);
+        $this->assertSame([
+            'comando' => 'notifiche:ritardi',
+            'turno' => 1,
+            'operatore' => 1,
+            'tipo' => 'I',
+            'sede' => 'Sede Nord',
+            'giorno' => '06-11-2026',
+            'orario' => '08:00',
+            'sms_inviati' => 0,
+            'sms_falliti' => 0,
+            'motivo_sms' => 'invio SMS disattivato',
+            'email_inviate' => 2,
+            'email' => 'mario@example.com',
+            'motivo_email' => null,
+        ], $this->voceDiario('Ritardo notificato')->context);
+        $this->assertSame('warning', $this->voceDiario('Ritardo saltato', ['turno' => 2])->level);
+        $this->assertSame('timbratura già presente', $this->voceDiario('Ritardo saltato', ['turno' => 2])->context['motivo']);
+        $this->assertSame('limite di avvisi raggiunto', $this->voceDiario('Ritardo saltato', ['turno' => 3])->context['motivo']);
+        $this->assertSame(1, $this->voceDiario('Ritardo saltato', ['turno' => 3])->context['avvisi']);
+        $this->assertSame([
+            'comando' => 'notifiche:ritardi',
+            'prova' => false,
+            'operatore' => null,
+            'cliente' => null,
+            'coda' => 1,
+            'inizio_notificati' => 1,
+            'inizio_saltati' => 2,
+            'fine_notificati' => 0,
+            'fine_saltati' => 0,
+        ], $this->voceDiario('Ritardi completati')->context);
+    }
+
+    public function test_avviso_turni_registra_sms_email_e_modello_assente(): void
+    {
+        $this->ascoltaDiario();
+
+        $this->artisan('notifiche:avviso-turni')
+            ->expectsOutputToContain('Modello avviso turni assente')
+            ->assertSuccessful();
+
+        $this->assertSame('warning', $this->voceDiario('Modello avviso turni assente')->level);
+
+        config(['sms.enabled' => true]);
+        $this->fingiProvider();
+        DB::table('tc_turni')->update(['ora_inizio' => '11:00']);
+        $this->messaggio(['id' => 1, 'ore' => 2]);
+        $this->diario = [];
+
+        $this->artisan('notifiche:avviso-turni')->assertSuccessful();
+
+        $this->assertSame([
+            'comando' => 'notifiche:avviso-turni',
+            'turno' => 1,
+            'operatore' => 1,
+            'sede' => 'Sede Nord',
+            'giorno' => '06-11-2026',
+            'orario' => '11:00',
+            'sms_inviati' => 3,
+            'sms_falliti' => 0,
+            'motivo_sms' => null,
+            'email_inviate' => 1,
+            'email' => 'mario@example.com',
+            'motivo_email' => null,
+        ], $this->voceDiario('Avviso turno elaborato')->context);
+        $this->assertSame([
+            'comando' => 'notifiche:avviso-turni',
+            'prova' => false,
+            'operatore' => null,
+            'cliente' => null,
+            'giorno' => '2026-11-06',
+            'ora' => '11:00',
+            'turni' => 1,
+            'email_inviate' => 1,
+        ], $this->voceDiario('Avvisi turno completati')->context);
+    }
+
+    public function test_scadenze_registrano_modello_assente_e_righe_inviate(): void
+    {
+        $this->ascoltaDiario();
+
+        $this->artisan('notifiche:scadenze')->assertSuccessful();
+
+        $this->assertSame('modello assente', $this->voceDiario('Riepilogo scadenze saltato', ['tipo' => 'certificati'])->context['motivo']);
+        $this->assertSame('modello assente', $this->voceDiario('Riepilogo scadenze saltato', ['tipo' => 'materiali'])->context['motivo']);
+
+        DB::connection('mysql')->getPdo()->sqliteCreateFunction('CONCAT', fn (...$parti) => implode('', $parti));
+        Schema::create('_certificati', function (Blueprint $table): void {
+            $table->increments('id');
+            $table->string('nome');
+        });
+        Schema::create('tc_documenti', function (Blueprint $table): void {
+            $table->increments('id');
+            $table->integer('id_tipo');
+            $table->integer('tipologia');
+            $table->string('tipo');
+            $table->string('descrizione');
+            $table->date('scadenza');
+        });
+        DB::table('_certificati')->insert(['id' => 1, 'nome' => 'Certificato']);
+        DB::table('tc_documenti')->insert([
+            'id_tipo' => 1, 'tipologia' => 1, 'tipo' => 'O', 'descrizione' => 'proprio', 'scadenza' => '2026-11-06',
+        ]);
+        $this->messaggio(['id' => 4, 'modello_email' => '[CERTIFICATO]']);
+        $this->diario = [];
+
+        $this->artisan('notifiche:scadenze')->assertSuccessful();
+
+        $this->assertSame([
+            'comando' => 'notifiche:scadenze',
+            'tipo' => 'certificati',
+            'limite' => '2026-11-06',
+            'righe' => 1,
+            'email_inviate' => 1,
+            'destinatari' => 'admin@example.com',
+        ], $this->voceDiario('Riepilogo scadenze inviato')->context);
+        $this->assertSame(0, $this->voceDiario('Scadenze completate')->context['materiali']);
+        $this->assertSame(1, $this->voceDiario('Scadenze completate')->context['certificati']);
+    }
+
+    public function test_programmazione_di_prova_registra_ogni_turno(): void
+    {
+        DB::table('tc_admin')->where('id', 1)->update(['email' => ProvaNotifiche::EMAIL]);
+        $this->ascoltaDiario();
+
+        $this->artisan('notifiche:programmazione', ['--prova-sicura' => true])->assertSuccessful();
+
+        $this->assertSame([
+            'comando' => 'notifiche:programmazione',
+            'turno' => 1,
+            'operatore' => 1,
+            'cliente' => 1,
+            'giorno' => '2026-11-06',
+            'ora_inizio' => '08:00',
+            'ora_fine' => '16:00',
+        ], $this->voceDiario('Turno di prova in programmazione')->context);
+        $this->assertSame([
+            'comando' => 'notifiche:programmazione',
+            'operatore' => 1,
+            'cliente' => 1,
+            'turni' => 1,
+            'email' => ProvaNotifiche::EMAIL,
+        ], $this->voceDiario('Programmazione di prova inviata')->context);
+    }
+
+    public function test_programmazione_reale_registra_clienti_e_destinatari(): void
+    {
+        Schema::table('tc_turni', function (Blueprint $table): void {
+            $table->float('ore')->nullable();
+        });
+        Schema::table('tc_sedi', function (Blueprint $table): void {
+            $table->unsignedInteger('id_cliente')->nullable();
+        });
+        Schema::table('tc_admin', function (Blueprint $table): void {
+            $table->integer('user_type')->nullable();
+        });
+        DB::table('tc_sedi')->where('id', 1)->update(['id_cliente' => 1]);
+        DB::table('tc_admin')->where('id', 1)->update(['user_type' => 2]);
+        $this->ascoltaDiario();
+
+        $this->artisan('notifiche:programmazione')->assertSuccessful();
+
+        $this->assertSame([
+            'comando' => 'notifiche:programmazione',
+            'cliente' => 1,
+            'ragione_sociale' => 'Prova',
+            'sedi' => 1,
+        ], $this->voceDiario('Programmazione cliente inclusa')->context);
+        $this->assertSame([
+            'comando' => 'notifiche:programmazione',
+            'destinatari' => 1,
+            'email_inviate' => 1,
+            'indirizzi' => 'mario@example.com',
+            'dal' => '2026-11-06',
+            'al' => '2026-11-12',
+        ], $this->voceDiario('Programmazione inviata')->context);
+    }
+
+    private function ascoltaDiario(): void
+    {
+        config(['logging.channels.cron' => [
+            'driver' => 'monolog',
+            'handler' => NullHandler::class,
+        ]]);
+        Log::forgetChannel('cron');
+        $this->diario = [];
+
+        Log::listen(function (MessageLogged $messaggio): void {
+            if (isset($messaggio->context['comando'])) {
+                $this->diario[] = $messaggio;
+            }
+        });
+    }
+
+    /** @param  array<string, mixed>  $contesto */
+    private function voceDiario(string $messaggio, array $contesto = []): MessageLogged
+    {
+        foreach ($this->diario as $voce) {
+            if ($voce->message !== $messaggio) {
+                continue;
+            }
+
+            foreach ($contesto as $chiave => $valore) {
+                if (($voce->context[$chiave] ?? null) !== $valore) {
+                    continue 2;
+                }
+            }
+
+            return $voce;
+        }
+
+        $this->fail('Voce di diario assente: '.$messaggio);
     }
 }
