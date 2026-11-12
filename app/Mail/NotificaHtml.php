@@ -35,7 +35,8 @@ class NotificaHtml extends Mailable
     public static function renderizza(string $oggetto, string $corpoHtml, ?array $azione = null): string
     {
         $config = Config::first();
-        $colore = preg_match('/^#[0-9a-fA-F]{6}$/', (string) $config?->colore_primario) ? $config->colore_primario : '#0ea5e9';
+        $app = trim((string) config('app.name'));
+        $parti = preg_split('/\s+/', $app, 2) ?: [$app];
         $indirizzo = trim(html_entity_decode(implode(' ', array_filter([
             $config?->societa_indirizzo,
             trim($config?->societa_cap.' '.$config?->societa_comune.($config?->societa_provincia ? ' ('.$config->societa_provincia.')' : '')),
@@ -45,9 +46,10 @@ class NotificaHtml extends Mailable
             'oggetto' => $oggetto,
             'corpoHtml' => $corpoHtml,
             'azione' => $azione,
-            'colore' => $colore,
-            'app' => $config?->app ?: config('app.name'),
-            'logo' => asset('brand/logo-security-scanner.png'),
+            'app' => $app,
+            'marca' => $parti[0],
+            'marchio' => $parti[1] ?? '',
+            'logo' => self::logoIncorporato(),
             'societa' => [
                 'ragione_sociale' => $config?->ragione_sociale ?: config('app.name'),
                 'indirizzo' => $indirizzo,
@@ -56,5 +58,20 @@ class NotificaHtml extends Mailable
                 'iva' => (string) $config?->societa_iva,
             ],
         ])->render();
+    }
+
+    /**
+     * L'immagine viaggia nel messaggio: un URL locale non è raggiungibile dal client di posta.
+     */
+    private static function logoIncorporato(): string
+    {
+        $percorso = public_path('brand/icon-192.png');
+        $contenuto = is_file($percorso) ? file_get_contents($percorso) : false;
+
+        if ($contenuto === false || $contenuto === '') {
+            return rtrim((string) config('app.url'), '/').'/brand/icon-192.png';
+        }
+
+        return 'data:image/png;base64,'.base64_encode($contenuto);
     }
 }

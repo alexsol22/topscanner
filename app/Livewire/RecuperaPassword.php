@@ -9,13 +9,15 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Title;
 use Livewire\Attributes\Validate;
 use Livewire\Component;
 
 #[Layout('layouts::guest')]
+#[Title('Recupero password')]
 class RecuperaPassword extends Component
 {
-    #[Validate('required', as: 'email')]
+    #[Validate('required', as: 'utente')]
     public string $email = '';
 
     public bool $inviata = false;

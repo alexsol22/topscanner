@@ -19,6 +19,7 @@ class RecuperaPasswordTest extends TestCase
         parent::setUp();
 
         config([
+            'app.name' => 'Omnia Control',
             'database.default' => 'mysql',
             'database.connections.mysql' => config('database.connections.sqlite'),
         ]);
@@ -50,7 +51,7 @@ class RecuperaPasswordTest extends TestCase
             $table->string('email')->nullable();
         });
         DB::table('tc_config')->insert([
-            'app' => 'Omnia Control', 'ragione_sociale' => 'Top Security Srl', 'colore_primario' => '#289aca',
+            'app' => 'S 420 ITALPOL', 'ragione_sociale' => 'Top Security Srl', 'colore_primario' => '#289aca',
             'societa_indirizzo' => 'Via Grandi n&deg; 4', 'societa_cap' => '41044', 'societa_comune' => 'Campogalliano',
             'societa_provincia' => 'MO', 'societa_telefono' => '059.3367149', 'societa_email' => 'info@example.test', 'societa_iva' => '0123',
         ]);
@@ -60,7 +61,13 @@ class RecuperaPasswordTest extends TestCase
     {
         $html = NotificaHtml::renderizza('Oggetto prova', '<p>Corpo</p>', ['etichetta' => 'Vai', 'url' => 'https://example.test/x']);
 
-        $this->assertStringContainsString('brand/logo-security-scanner.png', $html);
+        $this->assertStringContainsString('data:image/png;base64,iVBORw0KGgo', $html);
+        $this->assertStringContainsString('Omnia', $html);
+        $this->assertStringContainsString('Control', $html);
+        $this->assertStringNotContainsString('S 420 ITALPOL', $html);
+        $this->assertStringNotContainsString('#289aca', $html);
+        $this->assertStringContainsString('#b65d3b', $html);
+        $this->assertStringContainsString('#152B38', $html);
         $this->assertStringContainsString('Top Security Srl', $html);
         $this->assertStringContainsString('Via Grandi n° 4 41044 Campogalliano (MO)', $html);
         $this->assertStringContainsString('P.IVA 0123', $html);
@@ -81,6 +88,26 @@ class RecuperaPasswordTest extends TestCase
     {
         $this->get('/login')->assertOk()->assertSee(route('password.recupero'), false);
         $this->get('/recupera-password')->assertOk();
+    }
+
+    public function test_empty_recovery_request_asks_for_the_user(): void
+    {
+        Livewire::test(RecuperaPassword::class)
+            ->set('email', '')
+            ->call('recupera')
+            ->assertHasErrors(['email' => 'required'])
+            ->assertSee('Il campo utente è obbligatorio.');
+    }
+
+    public function test_password_recovery_page_shows_omnia_brand(): void
+    {
+        $this->get('/recupera-password')
+            ->assertOk()
+            ->assertSee('<title>Recupero password · Omnia Control</title>', false)
+            ->assertSee('brand/omnia-control.svg', false)
+            ->assertSee('OMNIA', false)
+            ->assertSee('CONTROL', false)
+            ->assertSee('Recupera password', false);
     }
 
     public function test_new_password_is_emailed_and_stored_hashed(): void
