@@ -10,10 +10,13 @@ class ScheduleNotificheTest extends TestCase
 {
     public function test_con_prova_disattiva_lo_scheduler_non_passa_il_flag(): void
     {
-        $comandi = collect(app(Schedule::class)->events())->map(fn ($evento) => $evento->command)->implode("\n");
+        $eventi = collect(app(Schedule::class)->events());
+        $comandi = $eventi->map(fn ($evento) => $evento->command)->implode("\n");
+        $programmazione = $eventi->first(fn ($evento) => str_contains((string) $evento->command, 'notifiche:programmazione'));
 
         $this->assertStringContainsString('notifiche:ritardi', $comandi);
-        $this->assertStringNotContainsString('notifiche:programmazione', $comandi);
+        $this->assertNotNull($programmazione);
+        $this->assertSame('0 7 * * 1', $programmazione->expression);
         $this->assertStringNotContainsString('--prova-sicura', $comandi);
     }
 
