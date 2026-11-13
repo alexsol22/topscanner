@@ -61,7 +61,8 @@ class RecuperaPasswordTest extends TestCase
     {
         $html = NotificaHtml::renderizza('Oggetto prova', '<p>Corpo</p>', ['etichetta' => 'Vai', 'url' => 'https://example.test/x']);
 
-        $this->assertStringContainsString('data:image/png;base64,iVBORw0KGgo', $html);
+        $this->assertStringContainsString(asset('brand/icon-192.png'), $html);
+        $this->assertStringNotContainsString('data:image/png;base64', $html);
         $this->assertStringContainsString('Omnia', $html);
         $this->assertStringContainsString('Control', $html);
         $this->assertStringNotContainsString('S 420 ITALPOL', $html);

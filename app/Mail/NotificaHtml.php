@@ -49,7 +49,7 @@ class NotificaHtml extends Mailable
             'app' => $app,
             'marca' => $parti[0],
             'marchio' => $parti[1] ?? '',
-            'logo' => self::logoIncorporato(),
+            'logo' => self::logoPubblico(),
             'societa' => [
                 'ragione_sociale' => $config?->ragione_sociale ?: config('app.name'),
                 'indirizzo' => $indirizzo,
@@ -60,18 +60,9 @@ class NotificaHtml extends Mailable
         ])->render();
     }
 
-    /**
-     * L'immagine viaggia nel messaggio: un URL locale non è raggiungibile dal client di posta.
-     */
-    private static function logoIncorporato(): string
+    /** URL pubblico: i client di posta non mostrano le immagini incorporate nel messaggio. */
+    private static function logoPubblico(): string
     {
-        $percorso = public_path('brand/icon-192.png');
-        $contenuto = is_file($percorso) ? file_get_contents($percorso) : false;
-
-        if ($contenuto === false || $contenuto === '') {
-            return rtrim((string) config('app.url'), '/').'/brand/icon-192.png';
-        }
-
-        return 'data:image/png;base64,'.base64_encode($contenuto);
+        return asset('brand/icon-192.png');
     }
 }
