@@ -152,6 +152,118 @@ class TurniGestioneTest extends TestCase
         return $componente->viewData('turni')->pluck('id')->sort()->values()->all();
     }
 
+    public function test_eliminare_un_turno_cancella_i_gda_collegati_e_lascia_gli_altri(): void
+    {
+        DB::table('tc_gda')->insert([
+            ['id_turno' => 2, 'id_operatore' => 2, 'id_cliente' => 1, 'id_sede' => 1, 'tipo' => 'I'],
+            ['id_turno' => 2, 'id_operatore' => 2, 'id_cliente' => 1, 'id_sede' => 1, 'tipo' => 'P'],
+            ['id_turno' => 2, 'id_operatore' => 2, 'id_cliente' => 1, 'id_sede' => 1, 'tipo' => 'F'],
+            ['id_turno' => 3, 'id_operatore' => 3, 'id_cliente' => 1, 'id_sede' => 1, 'tipo' => 'I'],
+        ]);
+
+        $componente = Livewire::actingAs(User::findOrFail(1))->test(Turni::class)
+            ->call('richiediEliminazione', 2)
+            ->set('conferma', 'no')
+            ->call('elimina')
+            ->assertHasErrors(['conferma'])
+            ->assertSee('Il testo non coincide: eliminazione non eseguita.');
+
+        $this->assertNotNull(DB::table('tc_turni')->find(2));
+
+        $componente
+            ->set('conferma', ' CONFERMA ')
+            ->call('elimina')
+            ->assertHasNoErrors()
+            ->assertSet('esitoEliminazione.ok', true)
+            ->assertSee('Eliminazione completata')
+            ->assertSee('Turno eliminato insieme ai GDA collegati.');
+
+        $this->assertNull(DB::table('tc_turni')->find(2));
+        $this->assertSame(0, DB::table('tc_gda')->where('id_turno', 2)->count());
+        $this->assertNotNull(DB::table('tc_turni')->find(3));
+        $this->assertSame('I', DB::table('tc_gda')->where('id_turno', 3)->value('tipo'));
+    }
+
+    public function test_eliminazione_multipla_cancella_i_turni_selezionati_e_i_gda_collegati(): void
+    {
+        DB::table('tc_clienti')->insert(['id' => 9, 'ragione_sociale' => 'Cliente Test', 'isTest' => 1]);
+        DB::table('tc_sedi')->insert([
+            'id' => 9, 'id_cliente' => 9, 'citta_id' => 1, 'provincia_id' => 1, 'id_codice' => null,
+            'descrizione' => 'Sede Test', 'indirizzo' => 'Via Test 9', 'cap' => '10100', 'lat' => '45.0', 'lng' => '7.6',
+        ]);
+        DB::table('tc_turni')->insert([
+            'id' => 9, 'id_cliente' => 9, 'id_sede' => 9, 'id_operatore' => 2,
+            'data_inizio' => '2026-11-06', 'ora_inizio' => '08:00', 'data_fine' => '2026-11-06', 'ora_fine' => '10:00',
+            'ore' => 2, 'ore_lavorate' => null, 'stato' => 'P', 'note_operatore' => null,
+        ]);
+        DB::table('tc_gda')->insert([
+            ['id_turno' => 1, 'tipo' => 'I'],
+            ['id_turno' => 2, 'tipo' => 'F'],
+            ['id_turno' => 3, 'tipo' => 'P'],
+            ['id_turno' => 9, 'tipo' => 'I'],
+        ]);
+
+        Livewire::actingAs(User::findOrFail(1))->test(Turni::class)
+            ->set('vista', 'lista')->set('da', '2026-11-01')->set('a', '2026-11-30')
+            ->assertSee('Elimina selezionati')
+            ->set('selezionati', [1, '2', 9, 999])
+            ->call('richiediEliminazioneSelezionati')
+            ->assertSee('Per confermare scrivi')
+            ->set('conferma', 'CONFERMA')
+            ->call('eliminaSelezionati')
+            ->assertSet('selezionati', [])
+            ->assertSet('esitoEliminazione.ok', true)
+            ->assertSee('2 turni eliminati insieme ai GDA collegati.');
+
+        $this->assertNull(DB::table('tc_turni')->find(1));
+        $this->assertNull(DB::table('tc_turni')->find(2));
+        $this->assertSame(0, DB::table('tc_gda')->whereIn('id_turno', [1, 2])->count());
+        $this->assertNotNull(DB::table('tc_turni')->find(3));
+        $this->assertSame('P', DB::table('tc_gda')->where('id_turno', 3)->value('tipo'));
+        $this->assertNotNull(DB::table('tc_turni')->find(9));
+        $this->assertSame('I', DB::table('tc_gda')->where('id_turno', 9)->value('tipo'));
+    }
+
+    public function test_selezione_pagina_ignora_turni_non_visibili_e_si_annulla(): void
+    {
+        DB::table('tc_clienti')->insert(['id' => 9, 'ragione_sociale' => 'Cliente Test', 'isTest' => 1]);
+        DB::table('tc_turni')->insert([
+            'id' => 9, 'id_cliente' => 9, 'id_sede' => 1, 'id_operatore' => 2,
+            'data_inizio' => '2026-11-06', 'ora_inizio' => '08:00', 'data_fine' => '2026-11-06', 'ora_fine' => '10:00',
+            'ore' => 2, 'stato' => 'P',
+        ]);
+
+        $componente = Livewire::actingAs(User::findOrFail(1))->test(Turni::class)
+            ->call('alternaSelezionePagina', [1, 2, 9]);
+
+        $selezionati = $componente->get('selezionati');
+        sort($selezionati);
+        $this->assertSame(['1', '2'], $selezionati);
+
+        $componente->call('alternaSelezionePagina', [1, 2, 9])->assertSet('selezionati', []);
+    }
+
+    public function test_senza_turni_selezionati_l_eliminazione_multipla_fallisce(): void
+    {
+        Livewire::actingAs(User::findOrFail(1))->test(Turni::class)
+            ->call('richiediEliminazioneSelezionati')
+            ->assertSet('esitoEliminazione.ok', false)
+            ->assertSee('Eliminazione non riuscita')
+            ->assertSee('Nessun turno selezionato.');
+
+        $this->assertSame(6, DB::table('tc_turni')->count());
+    }
+
+    public function test_operatore_non_puo_eliminare_i_turni_selezionati(): void
+    {
+        Livewire::actingAs(User::findOrFail(2))->test(Turni::class)
+            ->set('selezionati', [1])
+            ->call('richiediEliminazioneSelezionati')
+            ->assertForbidden();
+
+        $this->assertNotNull(DB::table('tc_turni')->find(1));
+    }
+
     public function test_filtro_stato_replica_la_legenda_di_yii(): void
     {
         $atteso = [

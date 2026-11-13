@@ -1,5 +1,37 @@
 @php($staff = auth()->user()->isStaff())
 <div class="space-y-5">
+    @if ($eliminaSelezione)
+        <x-ui.conferma-eliminazione title="Eliminare i turni selezionati?" atteso="conferma" azione="eliminaSelezionati">
+            <p>Verranno eliminati <strong>definitivamente</strong> i turni selezionati e i GDA collegati.</p>
+        </x-ui.conferma-eliminazione>
+    @elseif ($turnoDaEliminare)
+        <x-ui.conferma-eliminazione :title="'Eliminare il turno del '.$turnoDaEliminare->inizio->format('d/m/Y H:i').'?'" atteso="conferma">
+            <p>Verranno eliminati <strong>definitivamente</strong> il turno di {{ $turnoDaEliminare->operatore?->nome_completo }} e i GDA collegati.</p>
+        </x-ui.conferma-eliminazione>
+    @endif
+
+    @if ($esitoEliminazione)
+        <x-ui.modal :title="$esitoEliminazione['ok'] ? 'Eliminazione completata' : 'Eliminazione non riuscita'" close="chiudiEsitoEliminazione">
+            <div class="space-y-4">
+                <div @class([
+                    'flex gap-3 rounded-2xl p-4 ring-1',
+                    'bg-emerald-50 ring-emerald-100' => $esitoEliminazione['ok'],
+                    'bg-rose-50 ring-rose-100' => ! $esitoEliminazione['ok'],
+                ])>
+                    @if ($esitoEliminazione['ok'])
+                        <svg class="h-6 w-6 shrink-0 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>
+                    @else
+                        <svg class="h-6 w-6 shrink-0 text-rose-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z"/></svg>
+                    @endif
+                    <p @class(['text-sm font-semibold', 'text-emerald-700' => $esitoEliminazione['ok'], 'text-rose-700' => ! $esitoEliminazione['ok']])>{{ $esitoEliminazione['testo'] }}</p>
+                </div>
+                <div class="flex justify-end">
+                    <button type="button" wire:click="chiudiEsitoEliminazione" class="btn-primary">Ok</button>
+                </div>
+            </div>
+        </x-ui.modal>
+    @endif
+
     <h1 class="text-2xl font-bold tracking-tight text-slate-800">
         Agenda Pos
         @if ($clienteSelezionato)
@@ -335,13 +367,25 @@
     @endif
 
     @if ($vista === 'lista')
-    <div class="card overflow-hidden"><div class="overflow-x-auto">
+    @php($idsPagina = $turni->pluck('id')->map(fn ($id) => (int) $id)->all())
+    @php($paginaSelezionata = $idsPagina !== [] && array_diff($idsPagina, array_map('intval', $selezionati)) === [])
+    <div class="card overflow-hidden">
+        @if ($staff)
+            <div class="flex flex-wrap items-center justify-between gap-3 border-b border-sky-100 px-4 py-3">
+                <p class="text-sm text-slate-600">{{ count($selezionati) }} selezionati</p>
+                <button type="button" wire:click="richiediEliminazioneSelezionati" @disabled(count($selezionati) === 0) class="btn-danger">Elimina selezionati</button>
+            </div>
+        @endif
+        <div class="overflow-x-auto">
         <table class="min-w-full divide-y divide-sky-100">
-            <thead class="bg-sky-50/60"><tr><th class="th">Ragione Sociale</th><th class="th">Sede</th><th class="th">Operatore</th><th class="th">Inizio Turno</th><th class="th">Fine Turno</th><th class="th text-center">Dettaglio</th><th class="th">Ore</th><th class="th">Stato</th>@if ($staff)<th class="th text-center">Inizia</th><th class="th text-center">Chiudi</th><th class="th text-center">Mod</th><th class="th text-center">Can</th>@endif</tr></thead>
+            <thead class="bg-sky-50/60"><tr>@if ($staff)<th class="th w-12"><input type="checkbox" @checked($paginaSelezionata) wire:click="alternaSelezionePagina({{ json_encode($idsPagina) }})" aria-label="Seleziona i turni di questa pagina" class="size-4 rounded border-sky-300 text-sky-600" @disabled($idsPagina === [])></th>@endif<th class="th">Ragione Sociale</th><th class="th">Sede</th><th class="th">Operatore</th><th class="th">Inizio Turno</th><th class="th">Fine Turno</th><th class="th text-center">Dettaglio</th><th class="th">Ore</th><th class="th">Stato</th>@if ($staff)<th class="th text-center">Inizia</th><th class="th text-center">Chiudi</th><th class="th text-center">Mod</th><th class="th text-center">Can</th>@endif</tr></thead>
             <tbody class="divide-y divide-sky-50">
                 @forelse ($turni as $t)
                     @php([$et, $cl] = \App\Models\Legacy\Turno::etichette()[$t->statoEffettivo()])
                     <tr wire:key="t{{ $t->id }}" class="hover:bg-sky-50/40">
+                        @if ($staff)
+                            <td class="td"><input type="checkbox" wire:model.live="selezionati" value="{{ $t->id }}" aria-label="Seleziona il turno del {{ $t->inizio->format('d/m/Y H:i') }}" class="size-4 rounded border-sky-300 text-sky-600"></td>
+                        @endif
                         <td class="td font-semibold text-slate-800">{{ $t->sede?->cliente?->ragione_sociale }}</td>
                         <td class="td">{{ $t->sede?->descrizione }}</td>
                         <td class="td">{{ $t->operatore?->nome_completo }}</td>
@@ -361,15 +405,16 @@
                             <td class="td text-center">@if ($t->stato === 'P' && $t->inizio->lt(now()))<button wire:click="apriChiudi({{ $t->id }})" class="btn-soft !px-3 !py-1.5">Inizia</button>@endif</td>
                             <td class="td text-center">@if ($t->stato === 'I' && $t->fine->lt(now()))<button wire:click="apriChiudi({{ $t->id }})" class="btn-soft !px-3 !py-1.5">Chiudi</button>@endif</td>
                             <td class="td text-center"><button wire:click="modifica({{ $t->id }})" class="btn-soft !px-3 !py-1.5">Mod</button></td>
-                            <td class="td text-center"><button wire:click="elimina({{ $t->id }})" wire:confirm="Eliminare il turno?" class="btn-danger !px-3 !py-1.5">Can</button></td>
+                            <td class="td text-center"><button type="button" wire:click="richiediEliminazione({{ $t->id }})" class="btn-danger !px-3 !py-1.5">Can</button></td>
                         @endif
                     </tr>
                 @empty
-                    <tr><td colspan="{{ $staff ? 12 : 8 }}" class="td py-10 text-center text-slate-500">Nessun turno nel periodo selezionato.</td></tr>
+                    <tr><td colspan="{{ $staff ? 13 : 8 }}" class="td py-10 text-center text-slate-500">Nessun turno nel periodo selezionato.</td></tr>
                 @endforelse
             </tbody>
         </table>
-    </div></div>
+        </div>
+    </div>
     {{ $turni->links() }}
     @endif
 

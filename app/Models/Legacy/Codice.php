@@ -40,12 +40,13 @@ class Codice extends LegacyModel
      * Prossimo ITALPOL* a 6 cifre, in coda alla numerazione già usata.
      * I codici non numerici (per esempio ITALPOL*S12) non contano.
      * I riservati sono numeri scelti in questa richiesta ma non ancora scritti.
+     * Se $dopo è valorizzato, la ricerca riparte da quel numero senza rileggere l'archivio.
      *
      * @param  array<int, string>  $riservati
      */
-    public static function prossimoCodice(array $riservati = []): string
+    public static function prossimoCodice(array $riservati = [], ?int $dopo = null): string
     {
-        $numero = static::ultimoNumero($riservati);
+        $numero = $dopo ?? static::ultimoNumero($riservati);
 
         do {
             $numero++;

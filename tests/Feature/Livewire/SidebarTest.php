@@ -59,11 +59,12 @@ class SidebarTest extends TestCase
             route('presenze'),
             route('presenze.clienti'),
             route('presenze.operatori'),
-            route('messaggi.canale', ['canale' => 'sms']),
             route('messaggi.canale', ['canale' => 'email']),
         ] as $url) {
             $risposta->assertSee('href="'.$url.'"', false);
         }
+
+        $risposta->assertDontSee('href="'.route('messaggi.canale', ['canale' => 'sms']).'"', false);
 
         $this->assertSame(1, substr_count($risposta->getContent(), 'href="'.route('messaggi').'"'));
 
@@ -76,7 +77,7 @@ class SidebarTest extends TestCase
             ->assertSee('Orari clienti')
             ->assertSee('Orari operatori')
             ->assertSee('Messaggi')
-            ->assertSee('SMS inviati')
+            ->assertDontSee('SMS inviati')
             ->assertSee('Email inviate')
             ->assertSee('WhatsApp inviati')
             ->assertSee('aria-disabled="true"', false)
@@ -84,7 +85,7 @@ class SidebarTest extends TestCase
             ->assertSee('Generatore QR')
             ->assertDontSee('Data Base');
         $risposta->assertDontSee('href="'.route('accessi').'"', false);
-        $risposta->assertDontSee('href="'.url('/generatore-qr').'"', false);
+        $risposta->assertSee('href="'.route('generatore-qr').'"', false);
         $risposta->assertDontSee('Canale messaggi');
         $risposta->assertDontSee('href="'.route('sedi').'"', false);
     }

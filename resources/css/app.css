@@ -26,6 +26,15 @@
     .select2-container--default .select2-search--dropdown .select2-search__field { @apply rounded-lg border border-sky-200 px-3 py-2 text-sm text-slate-800; }
     .select2-container--default .select2-results__option--highlighted[aria-selected] { @apply bg-sky-500 text-white; }
     .select2-container--default .select2-results__option[aria-selected=true] { @apply bg-sky-100 text-sky-800; }
+    .qr-studio { display: grid; align-items: start; gap: 1.5rem; }
+    @media (min-width: 640px) {
+        .qr-studio { grid-template-columns: 22rem minmax(0, 1fr); }
+    }
+    .qr-tela {
+        background-color: #c5d0de;
+        background-image: radial-gradient(circle, #7f93ab 1.15px, transparent 1.15px);
+        background-size: 22px 22px;
+    }
 }
 
 /* Tema chiaro/scuro: in scuro la palette viene rimappata, così ogni pagina si adatta in modo uniforme */
@@ -108,6 +117,11 @@ html.dark {
 html.dark,
 html.dark body {
     background-color: var(--page);
+}
+
+html.dark .qr-tela {
+    background-color: #070d18;
+    background-image: radial-gradient(circle, #314864 1.15px, transparent 1.15px);
 }
 
 html.dark .bg-white { background-color: var(--surface); }

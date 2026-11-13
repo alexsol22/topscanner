@@ -13,6 +13,7 @@ class ScheduleNotificheTest extends TestCase
         $comandi = collect(app(Schedule::class)->events())->map(fn ($evento) => $evento->command)->implode("\n");
 
         $this->assertStringContainsString('notifiche:ritardi', $comandi);
+        $this->assertStringNotContainsString('notifiche:programmazione', $comandi);
         $this->assertStringNotContainsString('--prova-sicura', $comandi);
     }
 

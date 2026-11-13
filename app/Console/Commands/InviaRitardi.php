@@ -14,7 +14,7 @@ class InviaRitardi extends Command
 {
     use DiarioCron;
 
-    protected $signature = 'notifiche:ritardi {--prova-sicura : Limita la prova all’operatore e al cliente autorizzati: mail solo a lui e senza SMS, segnando comunque ritardo e coda}';
+    protected $signature = 'notifiche:ritardi {--prova-sicura : Limita la prova all’operatore e al cliente autorizzati: mail a lui e agli admin del modello, senza SMS, segnando comunque ritardo e coda}';
 
     protected $description = 'Invia le email di ritardo timbratura inizio/fine turno (modelli 2 e 3) e le comunicazioni turni in coda';
 

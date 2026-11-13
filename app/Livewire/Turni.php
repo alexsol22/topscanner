@@ -12,6 +12,7 @@ use App\Services\PianificazioneTurni;
 use App\Services\Timbratura;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
@@ -70,6 +71,18 @@ class Turni extends Component
 
     public ?string $esitoInvio = null;
 
+    /** @var list<int|string> */
+    public array $selezionati = [];
+
+    public ?int $eliminaId = null;
+
+    public bool $eliminaSelezione = false;
+
+    public string $conferma = '';
+
+    /** @var array{ok: bool, testo: string}|null */
+    public ?array $esitoEliminazione = null;
+
     public function mount(): void
     {
         $this->mese = today()->toDateString();
@@ -80,6 +93,10 @@ class Turni extends Component
     {
         if (in_array($name, ['da', 'a', 'filtroSede', 'filtroOperatore', 'filtroCliente', 'filtroStato', 'vista'])) {
             $this->resetPage();
+        }
+
+        if (in_array($name, ['da', 'a', 'filtroSede', 'filtroOperatore', 'filtroCliente', 'filtroStato'])) {
+            $this->selezionati = [];
         }
     }
 
@@ -316,10 +333,154 @@ class Turni extends Component
         $this->modal = $saltati ? true : false;
     }
 
-    public function elimina(int $id): void
+    public function richiediEliminazione(int $id): void
     {
         $this->soloStaff();
-        $this->query()->findOrFail($id)->delete();
+        $this->query()->findOrFail($id);
+        $this->reset('conferma');
+        $this->resetErrorBag();
+        $this->esitoEliminazione = null;
+        $this->eliminaSelezione = false;
+        $this->eliminaId = $id;
+    }
+
+    public function richiediEliminazioneSelezionati(): void
+    {
+        $this->soloStaff();
+
+        if ($this->idsSelezionati() === []) {
+            $this->esitoEliminazione = ['ok' => false, 'testo' => 'Nessun turno selezionato.'];
+
+            return;
+        }
+
+        $this->reset('conferma');
+        $this->resetErrorBag();
+        $this->esitoEliminazione = null;
+        $this->eliminaId = null;
+        $this->eliminaSelezione = true;
+    }
+
+    public function annullaEliminazione(): void
+    {
+        $this->reset('eliminaId', 'eliminaSelezione', 'conferma');
+        $this->resetErrorBag();
+    }
+
+    public function chiudiEsitoEliminazione(): void
+    {
+        $this->esitoEliminazione = null;
+    }
+
+    public function elimina(): void
+    {
+        $this->soloStaff();
+        abort_unless($this->eliminaId, 404);
+
+        if (! $this->confermaValida('conferma')) {
+            $this->addError('conferma', 'Il testo non coincide: eliminazione non eseguita.');
+
+            return;
+        }
+
+        $turno = $this->query()->find($this->eliminaId);
+        $this->annullaEliminazione();
+
+        if ($turno === null) {
+            $this->registraEsitoEliminazione(0);
+
+            return;
+        }
+
+        $this->cancellaTurni(collect([(int) $turno->id]));
+        $this->memorizzaSelezione(collect($this->idsSelezionati())->reject(fn (int $selezionato): bool => $selezionato === (int) $turno->id));
+        $this->registraEsitoEliminazione(1);
+    }
+
+    public function eliminaSelezionati(): void
+    {
+        $this->soloStaff();
+        abort_unless($this->eliminaSelezione, 404);
+
+        if (! $this->confermaValida('conferma')) {
+            $this->addError('conferma', 'Il testo non coincide: eliminazione non eseguita.');
+
+            return;
+        }
+
+        $ids = $this->query()->whereIn('id', $this->idsSelezionati())->pluck('id');
+        $this->annullaEliminazione();
+        $this->cancellaTurni($ids);
+        $this->selezionati = [];
+        $this->registraEsitoEliminazione($ids->count());
+    }
+
+    /** Seleziona o deseleziona i turni visibili della pagina corrente. */
+    public function alternaSelezionePagina(array $ids): void
+    {
+        $this->soloStaff();
+
+        $richiesti = collect($ids)
+            ->map(fn (mixed $id): int => (int) $id)
+            ->filter(fn (int $id): bool => $id > 0)
+            ->unique()
+            ->values();
+        $autorizzati = $this->query()->whereIn('id', $richiesti)->pluck('id')->map(fn (mixed $id): int => (int) $id);
+        $selezionati = collect($this->idsSelezionati());
+        $paginaIntera = $autorizzati->isNotEmpty() && $autorizzati->every(fn (int $id): bool => $selezionati->contains($id));
+
+        $this->memorizzaSelezione($paginaIntera
+            ? $selezionati->reject(fn (int $id): bool => $autorizzati->contains($id))
+            : $selezionati->merge($autorizzati)->unique());
+    }
+
+    private function confermaValida(string $atteso): bool
+    {
+        $normalizza = fn (string $v): string => mb_strtolower(trim(preg_replace('/\s+/u', ' ', $v)));
+
+        return $normalizza($this->conferma) === $normalizza($atteso);
+    }
+
+    private function registraEsitoEliminazione(int $eliminati): void
+    {
+        $this->esitoEliminazione = $eliminati > 0
+            ? ['ok' => true, 'testo' => $eliminati === 1 ? 'Turno eliminato insieme ai GDA collegati.' : $eliminati.' turni eliminati insieme ai GDA collegati.']
+            : ['ok' => false, 'testo' => 'Nessun turno è stato eliminato.'];
+    }
+
+    /** @param  Collection<int, mixed>  $ids */
+    private function cancellaTurni(Collection $ids): void
+    {
+        $ids = $ids->map(fn (mixed $id): int => (int) $id)->filter(fn (int $id): bool => $id > 0)->unique()->values();
+
+        if ($ids->isEmpty()) {
+            return;
+        }
+
+        Gda::whereIn('id_turno', $ids)->delete();
+        Turno::whereIn('id', $ids)->delete();
+    }
+
+    private function memorizzaSelezione(Collection $ids): void
+    {
+        $this->selezionati = $ids
+            ->map(fn (mixed $id): int => (int) $id)
+            ->filter(fn (int $id): bool => $id > 0)
+            ->unique()
+            ->map(fn (int $id): string => (string) $id)
+            ->values()
+            ->all();
+    }
+
+    /** @return list<int> */
+    private function idsSelezionati(): array
+    {
+        return collect($this->selezionati)
+            ->map(fn (mixed $id): int => (int) $id)
+            ->filter(fn (int $id): bool => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
     }
 
     /** Apre il modulo di inizio/chiusura manuale (apriChiudi di Yii): nota, data e ora sono obbligatorie. */
@@ -593,6 +754,7 @@ class Turni extends Component
             : null;
 
         $clienti = $this->clientiVisibili()->orderBy('ragione_sociale')->get(['id', 'ragione_sociale']);
+        $turnoDaEliminare = $this->eliminaId ? $this->query()->find($this->eliminaId) : null;
 
         return view('livewire.turni', [
             'totaleOreAgenda' => $this->totaleOreAgenda(),
@@ -612,6 +774,7 @@ class Turni extends Component
             'sediForm' => $sediForm,
             'disponibili' => $disponibili,
             'giorniSettimana' => [1 => 'Lun', 2 => 'Mar', 3 => 'Mer', 4 => 'Gio', 5 => 'Ven', 6 => 'Sab', 7 => 'Dom'],
+            'turnoDaEliminare' => $turnoDaEliminare,
         ]);
     }
 }

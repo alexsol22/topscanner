@@ -110,7 +110,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/clienti', Livewire\Clienti::class)->name('clienti');
         Route::get('/operatori', Livewire\Operatori::class)->name('operatori');
         Route::get('/messaggi', Livewire\ModelliMessaggio::class)->name('messaggi');
-        // Route::get('/generatore-qr', Livewire\GeneratoreQr::class)->name('generatore-qr');
+        Route::get('/generatore-qr', Livewire\GeneratoreQr::class)->name('generatore-qr');
         Route::get('/codici/{codice}/qrcode', [DownloadController::class, 'qrCodice'])->name('codici.qrcode');
         Route::get('/messaggi/modelli', fn () => redirect()->route('messaggi'))->name('messaggi.modelli');
         Route::get('/messaggi/{canale}', Livewire\Messaggi::class)

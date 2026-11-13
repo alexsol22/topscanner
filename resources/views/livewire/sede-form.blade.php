@@ -6,7 +6,7 @@
         'postazioni' => ['Postazioni', 'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10', ['postazioni.*', 'immaginiPostazioni.*']],
     ];
 @endphp
-<div class="space-y-5" x-data="{ tab: 'dati' }" @tab-errore.window="tab = $event.detail.tab">
+<div class="space-y-5" x-data="{ tab: 'dati' }" @tab-errore.window="tab = $event.detail.tab; $nextTick(() => { const visibile = [...document.querySelectorAll('.text-rose-600')].find((el) => el.offsetParent); visibile?.scrollIntoView({ behavior: 'smooth', block: 'center' }) })">
     <nav aria-label="Percorso" class="flex flex-wrap items-center gap-2 text-sm text-slate-500">
         <a href="{{ url('/') }}" wire:navigate class="hover:text-sky-700 hover:underline">Home</a>
         <span aria-hidden="true">»</span>
@@ -31,7 +31,7 @@
         @endforeach
     </div>
 
-    <form wire:submit="salva" class="space-y-5">
+    <form wire:submit="salva" class="space-y-5" novalidate>
         <section x-show="tab === 'dati'" class="card p-5 sm:p-6">
             <h2 class="mb-4 text-base font-bold text-slate-800">Dati sede</h2>
             <div class="grid gap-4 sm:grid-cols-2">
@@ -65,7 +65,7 @@
                 <x-ui.field label="Fotografia sede" name="foto" class="sm:col-span-2">
                     <div class="flex items-center gap-3">
                         <div x-data="{ fotoDisponibile: @js((bool) ($foto || ($sedeId && $fotoSede))) }" class="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-sky-50 text-sky-500 ring-1 ring-sky-100">
-                        @if ($foto)
+                        @if ($foto && $foto->isPreviewable())
                             <img x-show="fotoDisponibile" x-on:error="fotoDisponibile = false" src="{{ $foto->temporaryUrl() }}" alt="" class="h-full w-full object-cover">
                         @elseif ($sedeId && $fotoSede)
                             <a x-show="fotoDisponibile" href="{{ route('sedi.foto', $sedeId) }}" target="_blank" class="h-full w-full">
@@ -232,7 +232,7 @@
                 <div wire:key="post-{{ $chiave }}" class="card p-5 sm:p-6">
                     <div class="flex gap-4">
                         <div class="hidden w-40 shrink-0 sm:block">
-                            @if (isset($immaginiPostazioni[$chiave]) && $immaginiPostazioni[$chiave])
+                            @if (isset($immaginiPostazioni[$chiave]) && $immaginiPostazioni[$chiave]?->isPreviewable())
                                 <img src="{{ $immaginiPostazioni[$chiave]->temporaryUrl() }}" alt="" class="aspect-square w-full rounded-2xl object-cover ring-1 ring-sky-100">
                             @elseif ($p['id'] && $p['file'])
                                 <img src="{{ route('postazioni.immagine', $p['id']) }}" alt="" class="aspect-square w-full rounded-2xl object-cover ring-1 ring-sky-100">
@@ -241,7 +241,7 @@
                             @endif
                         </div>
                         <div class="grid min-w-0 flex-1 gap-4 sm:grid-cols-2">
-                            <x-ui.field label="Qrcode associato" name="postazioni.{{ $chiave }}.codice_id" class="sm:col-span-2">
+                            <x-ui.field label="Qrcode associato *" name="postazioni.{{ $chiave }}.codice_id" class="sm:col-span-2">
                                 <x-select-ricerca
                                     model="postazioni.{{ $chiave }}.codice_id"
                                     :options="collect($codiciPostazioni[$chiave] ?? [])->map(fn ($codice, $id) => ['id' => (string) $id, 'label' => $codice])->values()"

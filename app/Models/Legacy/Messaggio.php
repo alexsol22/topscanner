@@ -13,6 +13,7 @@ class Messaggio extends LegacyModel
         return [
             'invia_sms' => YesNo::class,
             'invia_email' => YesNo::class,
+            'segnato_fino_al' => 'date',
         ];
     }
 }

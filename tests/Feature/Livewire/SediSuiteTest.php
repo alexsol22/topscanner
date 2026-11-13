@@ -9,11 +9,14 @@ use App\Models\User;
 use App\Services\QrSede;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
+use PHPUnit\Framework\Attributes\TestWith;
 use Tests\TestCase;
 
 class SediSuiteTest extends TestCase
@@ -24,6 +27,7 @@ class SediSuiteTest extends TestCase
     {
         parent::setUp();
 
+        Cache::flush();
         config([
             'database.default' => 'mysql',
             'database.connections.mysql' => config('database.connections.sqlite'),
@@ -64,6 +68,23 @@ class SediSuiteTest extends TestCase
         Storage::disk($this->disco)->put("protected/documenti/Cliente_$cliente/Sede_$sede/Postazione_$postazione/p.jpg", 'x');
 
         return compact('sede', 'postazione', 'codiceSede', 'codicePostazione');
+    }
+
+    /** @return array{0: Testable, 1: string, 2: int} */
+    private function formConPostazione(): array
+    {
+        $cliente = $this->cliente();
+        $codiceSede = DB::table('tc_codici')->insertGetId(['codice' => 'ITALPOL*000401', 'stato' => 'C']);
+        $codicePostazione = DB::table('tc_codici')->insertGetId(['codice' => 'ITALPOL*000402', 'stato' => 'C']);
+        DB::table('_comuni')->insert(['id' => 1, 'comune' => 'Modena', 'sigla_provincia' => 'MO', 'id_provincia' => 1]);
+
+        $form = Livewire::actingAs($this->admin())->test(SedeForm::class)
+            ->set('codiceSedeId', (string) $codiceSede)
+            ->set('f.cliente_id', $cliente)->set('f.descrizione', 'Sede valida')->set('f.indirizzo', 'Via Roma 1')
+            ->set('f.citta', 'Modena')->set('f.provincia', 'MO')->set('f.lat', '44.5')->set('f.lng', '10.9')
+            ->call('aggiungiPostazione');
+
+        return [$form, array_key_first($form->get('postazioni')), $codicePostazione];
     }
 
     public function test_delete_requires_exact_confirmation_word(): void
@@ -201,91 +222,57 @@ class SediSuiteTest extends TestCase
         $this->actingAs($this->admin())->get(route('postazioni.qrcode', $sede['postazione']))->assertNotFound();
     }
 
-    public function test_qr_generator_shows_the_next_code_and_a_searchable_list_of_free_and_used_codes(): void
+    public function test_qr_generator_shows_the_next_code_and_hides_personalization_until_requested(): void
     {
-        $cliente = $this->cliente();
-        $sede = $this->sedeCompleta($cliente);
         DB::table('tc_codici')->insert(['codice' => 'ITALPOL*000300', 'stato' => 'C']);
-        Storage::disk($this->disco)->put('protected/documenti/QrcodeText/ITALPOL*P'.$sede['postazione'].'.png', 'png');
 
-        $this->actingAs($this->admin())->get('/generatore-qr')->assertNotFound();
+        $this->actingAs($this->admin())->get(route('generatore-qr'))
+            ->assertOk()
+            ->assertSee('class="mb-6 text-2xl font-bold tracking-tight text-slate-800 mx-auto w-full max-w-6xl"', false)
+            ->assertSee('ITALPOL*000301')
+            ->assertSee('Oggi ne restano 200')
+            ->assertSee('Personalizza i codici')
+            ->assertSee('role="switch"', false)
+            ->assertDontSee('Codice libero senza foto')
+            ->assertDontSee('Colore del codice QR');
 
         Livewire::actingAs($this->admin())->test(GeneratoreQr::class)
             ->assertSee('ITALPOL*000301')
+            ->assertSee('Numero di codici')
+            ->assertDontSee('Nuovo codice')
+            ->assertDontSee('Codice libero senza foto')
+            ->assertDontSee('Cerca un codice')
+            ->set('personalizza', true)
             ->assertSee('Colore del codice QR')
             ->assertSee('Titolo sotto il QR')
             ->assertSee('Logo al centro')
-            ->assertSee('Nuovo codice')
-            ->assertSee('Codice libero senza foto')
-            ->assertSee('ITALPOL*000300 — Libero, senza foto')
-            ->assertSee('ITALPOL*S'.$sede['sede'].' — Assegnato, senza foto')
-            ->assertSee('ITALPOL*P'.$sede['postazione'].' — Assegnato, con foto')
-            ->assertDontSee('Occupato')
-            ->assertDontSee('Cerca una sede')
-            ->assertDontSee('Associa')
             ->set('titolo', 'Portineria')
             ->assertSee('Portineria');
     }
 
-    public function test_qr_generator_saves_the_image_on_the_selected_code_without_a_photo(): void
+    public function test_qr_generator_keeps_codes_plain_unless_personalization_is_enabled(): void
     {
-        $libero = DB::table('tc_codici')->insertGetId(['codice' => 'ITALPOL*000119', 'stato' => 'C']);
-        $assegnato = DB::table('tc_codici')->insertGetId([
-            'codice' => 'ITALPOL*000118',
-            'stato' => 'A',
-            'tipo' => 'S',
-            'id_sede' => 5,
-        ]);
-        $conFoto = DB::table('tc_codici')->insertGetId(['codice' => 'ITALPOL*000212', 'stato' => 'C']);
-        Storage::disk($this->disco)->put('protected/documenti/QrcodeText/ITALPOL*000212.png', 'png');
-
-        $pagina = Livewire::actingAs($this->admin())->test(GeneratoreQr::class)
-            ->set('modalita', 'esistente');
-        $this->assertSame([(string) $libero], $pagina->viewData('codiciSenzaFoto')->pluck('id')->all());
-
-        $pagina
-            ->assertDontSee('ITALPOL*000213')
-            ->set('codiceEsistenteId', (string) $libero)
+        Livewire::actingAs($this->admin())->test(GeneratoreQr::class)
             ->set('titolo', 'Portineria')
+            ->set('colore', '#112233')
+            ->set('quantita', 1)
             ->call('generaLiberi')
             ->assertHasNoErrors()
-            ->assertSee('Foto salvata su ITALPOL*000119.')
-            ->assertSee('ITALPOL*000119 — Libero, con foto');
+            ->assertSee('Creato ITALPOL*000001.');
 
-        $this->assertNull(DB::table('tc_codici')->where('codice', 'ITALPOL*000213')->first());
-        $riga = DB::table('tc_codici')->find($libero);
-        $this->assertSame('C', $riga->stato);
-        $this->assertNull($riga->tipo);
-        $this->assertNull($riga->id_sede);
-        Storage::disk($this->disco)->assertExists('protected/documenti/QrcodeText/ITALPOL*000119.png');
-        $this->assertSame('image/png', getimagesizefromstring(Storage::disk($this->disco)->get('protected/documenti/QrcodeText/ITALPOL*000119.png'))['mime']);
-        $this->assertSame('png', Storage::disk($this->disco)->get('protected/documenti/QrcodeText/ITALPOL*000212.png'));
+        $qr = app(QrSede::class);
+        $qr->genera('ITALPOL*000002');
+        $generata = getimagesizefromstring(Storage::disk($this->disco)->get('protected/documenti/QrcodeText/ITALPOL*000001.png'));
+        $piatta = getimagesizefromstring(Storage::disk($this->disco)->get($qr->percorso('ITALPOL*000002')));
 
-        Livewire::actingAs($this->admin())->test(GeneratoreQr::class)
-            ->set('modalita', 'esistente')
-            ->set('codiceEsistenteId', (string) $conFoto)
-            ->call('generaLiberi')
-            ->assertHasErrors(['codiceEsistenteId' => 'Questo codice ha già la foto.']);
-
-        Livewire::actingAs($this->admin())->test(GeneratoreQr::class)
-            ->set('modalita', 'esistente')
-            ->set('codiceEsistenteId', (string) $assegnato)
-            ->call('generaLiberi')
-            ->assertHasErrors(['codiceEsistenteId' => 'Scegli un codice libero senza foto.']);
-
-        Storage::disk($this->disco)->assertMissing('protected/documenti/QrcodeText/ITALPOL*000118.png');
-
-        Livewire::actingAs($this->admin())->test(GeneratoreQr::class)
-            ->set('modalita', 'esistente')
-            ->call('generaLiberi')
-            ->assertHasErrors(['codiceEsistenteId' => 'Scegli un codice libero senza foto.']);
+        $this->assertSame($piatta[1], $generata[1]);
     }
 
     public function test_qr_generator_is_not_available_to_non_staff_users(): void
     {
         $operatore = $this->utente(4, 901);
 
-        $this->actingAs($operatore)->get('/generatore-qr')->assertNotFound();
+        $this->actingAs($operatore)->get(route('generatore-qr'))->assertForbidden();
         Livewire::actingAs($operatore)->test(GeneratoreQr::class)->assertForbidden();
     }
 
@@ -297,6 +284,7 @@ class SediSuiteTest extends TestCase
         ]);
 
         Livewire::actingAs($this->admin())->test(GeneratoreQr::class)
+            ->set('personalizza', true)
             ->set('quantita', 2)
             ->set('titolo', 'Portineria')
             ->set('colore', '#112233')
@@ -338,6 +326,7 @@ class SediSuiteTest extends TestCase
     public function test_qr_generator_rejects_a_title_longer_than_forty_characters(): void
     {
         Livewire::actingAs($this->admin())->test(GeneratoreQr::class)
+            ->set('personalizza', true)
             ->set('titolo', str_repeat('a', 41))
             ->call('generaLiberi')
             ->assertHasErrors(['titolo' => 'Il titolo può avere al massimo 40 caratteri.']);
@@ -345,17 +334,67 @@ class SediSuiteTest extends TestCase
         $this->assertSame(0, DB::table('tc_codici')->count());
     }
 
-    public function test_qr_generator_rejects_quantities_outside_one_to_twenty(): void
+    public function test_qr_generator_rejects_quantities_outside_one_to_two_hundred(): void
     {
-        foreach ([0, 21] as $quantita) {
+        foreach ([0, 201] as $quantita) {
             Livewire::actingAs($this->admin())->test(GeneratoreQr::class)
                 ->set('quantita', $quantita)
                 ->call('generaLiberi')
-                ->assertHasErrors(['quantita' => 'Indica da 1 a 20 QR da generare.']);
+                ->assertHasErrors(['quantita' => 'Indica da 1 a 200 QR da generare.']);
         }
 
         $this->assertSame(0, DB::table('tc_codici')->count());
         $this->assertSame([], Storage::disk($this->disco)->files('protected/documenti/QrcodeText'));
+    }
+
+    public function test_qr_generator_limits_new_codes_to_two_hundred_per_day(): void
+    {
+        $mock = \Mockery::mock(QrSede::class)->makePartial();
+        $mock->shouldReceive('genera')->times(200);
+        $this->app->instance(QrSede::class, $mock);
+
+        Livewire::actingAs($this->admin())->test(GeneratoreQr::class)
+            ->set('quantita', 200)
+            ->call('generaLiberi')
+            ->assertHasNoErrors()
+            ->assertSee('Creati da ITALPOL*000001 a ITALPOL*000200.');
+
+        $this->assertSame(200, DB::table('tc_codici')->count());
+        $this->assertSame('ITALPOL*000001', DB::table('tc_codici')->orderBy('codice')->value('codice'));
+        $this->assertSame('ITALPOL*000200', DB::table('tc_codici')->orderByDesc('codice')->value('codice'));
+
+        Livewire::actingAs($this->admin())->test(GeneratoreQr::class)
+            ->set('quantita', 1)
+            ->call('generaLiberi')
+            ->assertHasErrors(['quantita' => 'Hai già generato 200 codici oggi.']);
+
+        $this->assertSame(200, DB::table('tc_codici')->count());
+
+        $this->travel(1)->days();
+        $this->app->forgetInstance(QrSede::class);
+
+        Livewire::actingAs($this->admin())->test(GeneratoreQr::class)
+            ->set('quantita', 1)
+            ->call('generaLiberi')
+            ->assertHasNoErrors()
+            ->assertSee('Creato ITALPOL*000201.');
+
+        $this->assertSame(201, DB::table('tc_codici')->count());
+    }
+
+    public function test_qr_generator_rejects_a_batch_larger_than_the_codes_left_today(): void
+    {
+        Livewire::actingAs($this->admin())->test(GeneratoreQr::class)
+            ->set('quantita', 2)
+            ->call('generaLiberi')
+            ->assertHasNoErrors();
+
+        Livewire::actingAs($this->admin())->test(GeneratoreQr::class)
+            ->set('quantita', 199)
+            ->call('generaLiberi')
+            ->assertHasErrors(['quantita' => 'Oggi puoi generarne ancora 198.']);
+
+        $this->assertSame(2, DB::table('tc_codici')->count());
     }
 
     public function test_qr_generator_removes_partial_codes_when_image_writing_fails(): void
@@ -382,6 +421,18 @@ class SediSuiteTest extends TestCase
 
         $this->assertSame(0, DB::table('tc_codici')->count());
         $this->assertSame([], Storage::disk($this->disco)->files('protected/documenti/QrcodeText'));
+
+        $this->app->forgetInstance(QrSede::class);
+        $riprova = \Mockery::mock(QrSede::class)->makePartial();
+        $riprova->shouldReceive('genera')->times(200);
+        $this->app->instance(QrSede::class, $riprova);
+
+        Livewire::actingAs($this->admin())->test(GeneratoreQr::class)
+            ->set('quantita', 200)
+            ->call('generaLiberi')
+            ->assertHasNoErrors();
+
+        $this->assertSame(200, DB::table('tc_codici')->count());
     }
 
     public function test_generating_a_qr_does_not_replace_an_existing_file(): void
@@ -678,6 +729,142 @@ class SediSuiteTest extends TestCase
 
         $this->assertSame(0, DB::table('tc_sedi')->count());
         $this->assertSame('C', DB::table('tc_codici')->find($codice)->stato);
+    }
+
+    public function test_missing_station_title_shows_a_clear_message_and_opens_the_tab(): void
+    {
+        [$form, $chiave, $codicePostazione] = $this->formConPostazione();
+
+        $form->set("postazioni.$chiave.codice_id", (string) $codicePostazione)
+            ->call('salva')
+            ->assertOnlyHasErrors(["postazioni.$chiave.titolo" => 'Indica il titolo della postazione.'])
+            ->assertDispatched('tab-errore', tab: 'postazioni')
+            ->assertSee('Indica il titolo della postazione.')
+            ->assertDontSee('Il campo postazioni.', false)
+            ->assertSee('novalidate', false)
+            ->assertSee('Qrcode associato *');
+
+        $this->assertSame(0, DB::table('tc_sedi')->count());
+    }
+
+    public function test_station_title_over_255_characters_is_rejected(): void
+    {
+        [$form, $chiave, $codicePostazione] = $this->formConPostazione();
+
+        $form->set("postazioni.$chiave.codice_id", (string) $codicePostazione)
+            ->set("postazioni.$chiave.titolo", str_repeat('a', 256))
+            ->call('salva')
+            ->assertOnlyHasErrors(["postazioni.$chiave.titolo" => 'Il titolo della postazione può avere al massimo 255 caratteri.']);
+
+        $this->assertSame(0, DB::table('tc_sedi')->count());
+    }
+
+    public function test_missing_station_qr_shows_a_clear_message(): void
+    {
+        [$form, $chiave] = $this->formConPostazione();
+
+        $form->set("postazioni.$chiave.titolo", 'Ingresso')
+            ->call('salva')
+            ->assertOnlyHasErrors(["postazioni.$chiave.codice_id" => 'Associa un QR code alla postazione.'])
+            ->assertSee('Associa un QR code alla postazione.')
+            ->assertDispatched('tab-errore', tab: 'postazioni');
+
+        $this->assertSame(0, DB::table('tc_sedi')->count());
+    }
+
+    #[TestWith(['passaggi', '1.5', 'Il numero di passaggi deve essere un numero intero.'])]
+    #[TestWith(['passaggi', '-1', 'Il numero di passaggi non può essere negativo.'])]
+    #[TestWith(['passaggi', '1001', 'Il numero di passaggi non può superare 1000.'])]
+    #[TestWith(['minuti', '2.5', 'I minuti di passaggio devono essere un numero intero.'])]
+    #[TestWith(['minuti', '-3', 'I minuti di passaggio non possono essere negativi.'])]
+    #[TestWith(['minuti', '1441', 'I minuti di passaggio non possono superare 1440.'])]
+    public function test_invalid_station_numbers_show_a_clear_message(string $campo, string $valore, string $messaggio): void
+    {
+        [$form, $chiave, $codicePostazione] = $this->formConPostazione();
+
+        $form->set("postazioni.$chiave.codice_id", (string) $codicePostazione)
+            ->set("postazioni.$chiave.titolo", 'Ingresso')
+            ->set("postazioni.$chiave.$campo", $valore)
+            ->call('salva')
+            ->assertOnlyHasErrors(["postazioni.$chiave.$campo" => $messaggio])
+            ->assertSee($messaggio)
+            ->assertDontSee('Il campo postazioni.', false);
+
+        $this->assertSame(0, DB::table('tc_sedi')->count());
+    }
+
+    public function test_station_info_over_the_limit_is_rejected(): void
+    {
+        [$form, $chiave, $codicePostazione] = $this->formConPostazione();
+
+        $form->set("postazioni.$chiave.codice_id", (string) $codicePostazione)
+            ->set("postazioni.$chiave.titolo", 'Ingresso')
+            ->set("postazioni.$chiave.info", str_repeat('a', 65536))
+            ->call('salva')
+            ->assertOnlyHasErrors(["postazioni.$chiave.info" => 'Le informazioni della postazione sono troppo lunghe.']);
+
+        $this->assertSame(0, DB::table('tc_sedi')->count());
+    }
+
+    public function test_non_image_station_file_is_rejected(): void
+    {
+        [$form, $chiave, $codicePostazione] = $this->formConPostazione();
+
+        $form->set("postazioni.$chiave.codice_id", (string) $codicePostazione)
+            ->set("postazioni.$chiave.titolo", 'Ingresso')
+            ->set("immaginiPostazioni.$chiave", UploadedFile::fake()->create('nota.txt', 10, 'text/plain'))
+            ->call('salva')
+            ->assertOnlyHasErrors(["immaginiPostazioni.$chiave" => 'Carica un\'immagine per la postazione.'])
+            ->assertSee('Carica un\'immagine per la postazione.');
+
+        $this->assertSame(0, DB::table('tc_sedi')->count());
+    }
+
+    public function test_station_image_over_4_mb_is_rejected(): void
+    {
+        [$form, $chiave, $codicePostazione] = $this->formConPostazione();
+
+        $form->set("postazioni.$chiave.codice_id", (string) $codicePostazione)
+            ->set("postazioni.$chiave.titolo", 'Ingresso')
+            ->set("immaginiPostazioni.$chiave", UploadedFile::fake()->image('foto.jpg')->size(4097))
+            ->call('salva')
+            ->assertOnlyHasErrors(["immaginiPostazioni.$chiave" => 'L\'immagine della postazione non può superare 4 MB.']);
+
+        $this->assertSame(0, DB::table('tc_sedi')->count());
+    }
+
+    public function test_only_the_invalid_station_shows_the_title_error(): void
+    {
+        [$form, $prima, $codicePostazione] = $this->formConPostazione();
+        $altroCodice = DB::table('tc_codici')->insertGetId(['codice' => 'ITALPOL*000403', 'stato' => 'C']);
+
+        $form->call('aggiungiPostazione');
+        $seconda = array_key_last($form->get('postazioni'));
+
+        $form->set("postazioni.$prima.codice_id", (string) $codicePostazione)
+            ->set("postazioni.$seconda.codice_id", (string) $altroCodice)
+            ->set("postazioni.$seconda.titolo", 'Uscita')
+            ->call('salva')
+            ->assertOnlyHasErrors(["postazioni.$prima.titolo" => 'Indica il titolo della postazione.']);
+
+        $this->assertSame(1, substr_count($form->html(), 'Indica il titolo della postazione.'));
+        $this->assertSame(0, DB::table('tc_sedi')->count());
+    }
+
+    public function test_zero_station_numbers_are_saved(): void
+    {
+        [$form, $chiave, $codicePostazione] = $this->formConPostazione();
+
+        $form->set("postazioni.$chiave.codice_id", (string) $codicePostazione)
+            ->set("postazioni.$chiave.titolo", 'Ingresso')
+            ->set("postazioni.$chiave.passaggi", '0')
+            ->set("postazioni.$chiave.minuti", '0')
+            ->call('salva')
+            ->assertHasNoErrors();
+
+        $postazione = DB::table('tc_postazioni')->first();
+        $this->assertSame(0, (int) $postazione->passaggi);
+        $this->assertSame(0, (int) $postazione->minuti);
     }
 
     public function test_create_rejects_qr_code_assigned_to_another_site(): void

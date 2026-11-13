@@ -2,7 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Console\Commands\InviaProgrammazione;
 use App\Mail\NotificaHtml;
+use App\Models\Legacy\Messaggio;
+use App\Services\Comunicazioni;
 use App\Services\ProvaNotifiche;
 use App\Services\Sms;
 use Illuminate\Database\Schema\Blueprint;
@@ -303,7 +306,7 @@ class NotificheSmsTest extends TestCase
         $this->assertSame(0, DB::table('tc_send_sms')->count());
     }
 
-    public function test_prova_ritardi_segna_ritardo_e_coda_senza_sms_ne_altri_destinatari(): void
+    public function test_prova_ritardi_avvisa_operatore_e_admin_senza_sms(): void
     {
         config(['sms.enabled' => true]);
         Http::fake();
@@ -325,11 +328,19 @@ class NotificheSmsTest extends TestCase
         $this->artisan('notifiche:ritardi', ['--prova-sicura' => true])->assertSuccessful();
         $this->artisan('notifiche:ritardi', ['--prova-sicura' => true])->assertSuccessful();
 
-        Mail::assertSent(NotificaHtml::class, 2);
-        Mail::assertSent(NotificaHtml::class, fn (NotificaHtml $mail) => $mail->hasTo(ProvaNotifiche::EMAIL) && $mail->corpoHtml === 'Coda prova');
+        Mail::assertSent(NotificaHtml::class, 3);
         Mail::assertSent(NotificaHtml::class, fn (NotificaHtml $mail) => $mail->hasTo(ProvaNotifiche::EMAIL)
+            && $mail->oggettoEmail === '[PROVA] Comunicazione turni'
+            && $mail->corpoHtml === 'Coda prova');
+        Mail::assertSent(NotificaHtml::class, fn (NotificaHtml $mail) => $mail->hasTo(ProvaNotifiche::EMAIL)
+            && $mail->oggettoEmail === '[PROVA] Ritardo'
             && str_contains($mail->corpoHtml, 'Rossi Mario')
             && str_contains($mail->corpoHtml, 'Sede Nord'));
+        Mail::assertSent(NotificaHtml::class, fn (NotificaHtml $mail) => $mail->hasTo('admin@example.com')
+            && $mail->oggettoEmail === '[PROVA] Ritardo'
+            && str_contains($mail->corpoHtml, 'Rossi Mario')
+            && str_contains($mail->corpoHtml, 'Sede Nord'));
+        Mail::assertNotSent(NotificaHtml::class, fn (NotificaHtml $mail) => $mail->hasTo('altro@example.com'));
         Mail::assertNotSent(NotificaHtml::class, fn (NotificaHtml $mail) => str_contains($mail->corpoHtml, 'Sede Reale'));
         Http::assertNothingSent();
         $this->assertSame(1, (int) DB::table('tc_ritardi')->where('id_turno', 1)->value('inizio'));
@@ -726,6 +737,66 @@ class NotificheSmsTest extends TestCase
             'dal' => '2026-11-06',
             'al' => '2026-11-12',
         ], $this->voceDiario('Programmazione inviata')->context);
+    }
+
+    public function test_programmazione_disattivata_nel_modello_non_invia(): void
+    {
+        $this->messaggio(['id' => 6, 'invia_email' => 'N', 'oggetto' => 'Programmazione']);
+
+        $this->artisan('notifiche:programmazione')
+            ->expectsOutputToContain('Programmazione saltata: email disattivate sul modello')
+            ->assertSuccessful();
+
+        Mail::assertNothingSent();
+    }
+
+    public function test_programmazione_usa_oggetto_testo_e_destinatari_del_modello(): void
+    {
+        Schema::table('tc_turni', function (Blueprint $table): void {
+            $table->float('ore')->nullable();
+        });
+        Schema::table('tc_sedi', function (Blueprint $table): void {
+            $table->unsignedInteger('id_cliente')->nullable();
+        });
+        DB::table('tc_sedi')->where('id', 1)->update(['id_cliente' => 1]);
+        $this->messaggio([
+            'id' => 6,
+            'invia_email' => 'Y',
+            'oggetto' => 'Riepilogo ore',
+            'modello_email' => '<p>Settimana [DATA TURNO]</p>',
+            'admin_email' => 'scelto@example.com',
+        ]);
+
+        $this->artisan('notifiche:programmazione')->assertSuccessful();
+
+        Mail::assertSent(NotificaHtml::class, 1);
+        Mail::assertSent(NotificaHtml::class, fn (NotificaHtml $mail) => $mail->hasTo('scelto@example.com')
+            && $mail->oggettoEmail === 'Riepilogo ore 06-11-2026 - 12-11-2026'
+            && str_contains($mail->corpoHtml, 'Settimana 06-11-2026 - 12-11-2026')
+            && str_contains($mail->corpoHtml, 'Prova'));
+        Mail::assertNotSent(NotificaHtml::class, fn (NotificaHtml $mail) => $mail->hasTo('mario@example.com'));
+    }
+
+    public function test_anteprima_programmazione_ripete_il_riepilogo_inviato(): void
+    {
+        Schema::table('tc_turni', function (Blueprint $table): void {
+            $table->float('ore')->nullable();
+        });
+        Schema::table('tc_sedi', function (Blueprint $table): void {
+            $table->unsignedInteger('id_cliente')->nullable();
+        });
+        DB::table('tc_sedi')->where('id', 1)->update(['id_cliente' => 1]);
+        $this->messaggio([
+            'id' => 6,
+            'oggetto' => 'Programmazione',
+            'modello_email' => '<p>Buongiorno</p><p>Qui di seguito la situazione della programmazione della settimana in corso</p>',
+        ]);
+
+        $html = app(InviaProgrammazione::class)->anteprima(app(Comunicazioni::class), Messaggio::find(6));
+
+        $this->assertStringContainsString('Buongiorno', $html);
+        $this->assertStringContainsString('Cliente <b>Prova</b>', $html);
+        $this->assertStringContainsString('Sede <b>Sede Nord</b>', $html);
     }
 
     private function ascoltaDiario(): void

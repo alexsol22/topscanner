@@ -82,6 +82,36 @@ class SedeForm extends Component
         ];
     }
 
+    protected function messages(): array
+    {
+        return [
+            'postazioni.*.titolo.required' => 'Indica il titolo della postazione.',
+            'postazioni.*.titolo.max' => 'Il titolo della postazione può avere al massimo 255 caratteri.',
+            'postazioni.*.codice_id.required' => 'Associa un QR code alla postazione.',
+            'postazioni.*.passaggi.integer' => 'Il numero di passaggi deve essere un numero intero.',
+            'postazioni.*.passaggi.min' => 'Il numero di passaggi non può essere negativo.',
+            'postazioni.*.passaggi.max' => 'Il numero di passaggi non può superare 1000.',
+            'postazioni.*.minuti.integer' => 'I minuti di passaggio devono essere un numero intero.',
+            'postazioni.*.minuti.min' => 'I minuti di passaggio non possono essere negativi.',
+            'postazioni.*.minuti.max' => 'I minuti di passaggio non possono superare 1440.',
+            'postazioni.*.info.max' => 'Le informazioni della postazione sono troppo lunghe.',
+            'immaginiPostazioni.*.image' => 'Carica un\'immagine per la postazione.',
+            'immaginiPostazioni.*.max' => 'L\'immagine della postazione non può superare 4 MB.',
+        ];
+    }
+
+    protected function validationAttributes(): array
+    {
+        return [
+            'postazioni.*.titolo' => 'titolo della postazione',
+            'postazioni.*.codice_id' => 'QR code della postazione',
+            'postazioni.*.passaggi' => 'numero di passaggi',
+            'postazioni.*.minuti' => 'minuti di passaggio',
+            'postazioni.*.info' => 'informazioni della postazione',
+            'immaginiPostazioni.*' => 'immagine della postazione',
+        ];
+    }
+
     public function mount(?int $sede = null): void
     {
         $this->soloStaff();

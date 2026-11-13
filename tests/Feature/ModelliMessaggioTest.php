@@ -67,6 +67,7 @@ class ModelliMessaggioTest extends TestCase
 
         $this->assertSame(3, (int) DB::table('tc_messaggi')->where('id', 2)->value('numero_sms'));
         $this->assertSame(2, (int) DB::table('tc_messaggi')->where('id', 2)->value('numero_email'));
+        $this->assertSame('N', DB::table('tc_messaggi')->where('id', 2)->value('invia_sms'));
     }
 
     public function test_messaggi_page_shows_automatic_messages_without_a_channel_toggle(): void
@@ -76,6 +77,8 @@ class ModelliMessaggioTest extends TestCase
         $response->assertOk()
             ->assertSee('<title>Messaggi · Omnia Control</title>', false)
             ->assertSee('Messaggi automatici')
+            ->assertSee('Vedi layout')
+            ->assertDontSee('Invia SMS')
             ->assertDontSee('Canale messaggi');
     }
 
@@ -84,6 +87,57 @@ class ModelliMessaggioTest extends TestCase
         $response = $this->actingAs(User::findOrFail(1))->get(route('messaggi.modelli'));
 
         $response->assertRedirectToRoute('messaggi');
+    }
+
+    public function test_programmazione_mostra_lemail_che_viene_inviata(): void
+    {
+        Schema::create('tc_clienti', function (Blueprint $table): void {
+            $table->increments('id');
+            $table->string('ragione_sociale')->nullable();
+        });
+        Schema::create('tc_sedi', function (Blueprint $table): void {
+            $table->increments('id');
+            $table->unsignedInteger('id_cliente')->nullable();
+            $table->string('descrizione')->nullable();
+            $table->string('indirizzo')->nullable();
+            $table->integer('lun')->nullable();
+        });
+        Schema::create('tc_turni', function (Blueprint $table): void {
+            $table->increments('id');
+            $table->unsignedInteger('id_sede')->nullable();
+            $table->date('data_inizio')->nullable();
+            $table->float('ore')->nullable();
+        });
+        Schema::create('tc_config', function (Blueprint $table): void {
+            $table->increments('id');
+            $table->string('app')->nullable();
+        });
+        DB::table('tc_clienti')->insert(['id' => 1, 'ragione_sociale' => 'Cliente Visibile']);
+        DB::table('tc_sedi')->insert(['id' => 1, 'id_cliente' => 1, 'descrizione' => 'Sede Nord', 'indirizzo' => 'Via Roma', 'lun' => 4]);
+        DB::table('tc_messaggi')->insert([
+            'id' => 6, 'nome' => 'Messaggio programmazione settimanale', 'giorni' => 0, 'ore' => 0, 'minuti' => 0,
+            'invia_sms' => 'N', 'invia_email' => 'Y', 'modello_sms' => '', 'modello_email' => '<p>Buongiorno</p>',
+            'oggetto' => 'Programmazione', 'mittente' => 'ItalPol', 'numero_sms' => 1, 'numero_email' => 1,
+            'admin_sms' => '', 'admin_email' => 'segreteria@s-420italpol.it',
+        ]);
+
+        Livewire::actingAs(User::findOrFail(1))->test(ModelliMessaggio::class)
+            ->call('visualizza', 6)
+            ->assertSee('Layout email')
+            ->assertSee('Buongiorno')
+            ->assertSee('Cliente Visibile')
+            ->assertSee('Sede Nord');
+    }
+
+    public function test_modifica_mostra_le_variabili_inseribili_nel_testo(): void
+    {
+        Livewire::actingAs(User::findOrFail(1))->test(ModelliMessaggio::class)
+            ->call('modifica', 2)
+            ->assertSee('[OPERATORE]')
+            ->assertSee('[CERTIFICATO]')
+            ->assertSee('[MATERIALE]')
+            ->assertDontSee('Testo SMS')
+            ->assertDontSee('Mittente SMS');
     }
 
     public function test_numero_invii_ammette_solo_1_2_3_e_mittente_massimo_11_caratteri(): void

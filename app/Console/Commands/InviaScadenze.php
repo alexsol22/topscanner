@@ -23,8 +23,10 @@ class InviaScadenze extends Command
         ]);
 
         $idProva = $prova->contesto($comunicazioni, (bool) $this->option('prova-sicura'))['operatore'] ?? null;
-        $certificati = $this->inviaRiepilogo($comunicazioni, Messaggio::find(4), 'certificati', fn ($limite) => $this->certificati($limite, $idProva), $idProva);
-        $materiali = $this->inviaRiepilogo($comunicazioni, Messaggio::find(5), 'materiali', fn ($limite) => $this->materiali($limite, $idProva), $idProva);
+        $certificatiConfig = Messaggio::find(4);
+        $materialiConfig = Messaggio::find(5);
+        $certificati = $this->inviaRiepilogo($comunicazioni, $certificatiConfig, 'certificati', fn ($limite) => $this->certificati($limite, $idProva, $certificatiConfig?->segnato_fino_al?->toDateString()), $idProva);
+        $materiali = $this->inviaRiepilogo($comunicazioni, $materialiConfig, 'materiali', fn ($limite) => $this->materiali($limite, $idProva, $materialiConfig?->segnato_fino_al?->toDateString()), $idProva);
 
         $this->diario('Scadenze completate', [
             'prova' => $idProva !== null,
@@ -80,7 +82,7 @@ class InviaScadenze extends Command
         return count($testi);
     }
 
-    private function certificati(string $limite, ?int $idProva)
+    private function certificati(string $limite, ?int $idProva, ?string $dopo = null)
     {
         return DB::connection('mysql')->table('tc_documenti as d')
             ->leftJoin('tc_admin as u', 'd.id_tipo', '=', 'u.id')
@@ -88,18 +90,20 @@ class InviaScadenze extends Command
             ->where('d.tipo', 'O')
             ->when($idProva !== null, fn ($query) => $query->where('d.id_tipo', $idProva))
             ->whereNotNull('d.scadenza')
+            ->when($dopo !== null, fn ($query) => $query->whereDate('d.scadenza', '>', $dopo))
             ->whereDate('d.scadenza', '<=', $limite)
             ->selectRaw("CONCAT(t.nome, ' ', d.descrizione) as certificato, CONCAT(u.cognome, ' ', u.nome, ' COD ', u.codice) as operatore, DATE_FORMAT(d.scadenza, '%d-%m-%Y') as scadenza_certificato")
             ->get();
     }
 
-    private function materiali(string $limite, ?int $idProva)
+    private function materiali(string $limite, ?int $idProva, ?string $dopo = null)
     {
         return DB::connection('mysql')->table('tc_materiali as d')
             ->leftJoin('tc_admin as u', 'd.id_operatore', '=', 'u.id')
             ->leftJoin('_materiali as m', 'd.id_materiale', '=', 'm.id')
             ->whereNotNull('d.riconsegna')
             ->when($idProva !== null, fn ($query) => $query->where('d.id_operatore', $idProva))
+            ->when($dopo !== null, fn ($query) => $query->whereDate('d.riconsegna', '>', $dopo))
             ->whereDate('d.riconsegna', '<=', $limite)
             ->where('d.consegnato', 'N')
             ->selectRaw("CONCAT(m.nome, ' ', d.descrizione, ' Taglia ', d.taglia) as materiale, CONCAT(u.cognome, ' ', u.nome, ' COD ', u.codice) as operatore, DATE_FORMAT(d.riconsegna, '%d-%m-%Y') as scadenza_materiale")

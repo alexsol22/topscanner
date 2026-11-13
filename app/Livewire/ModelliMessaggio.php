@@ -2,7 +2,10 @@
 
 namespace App\Livewire;
 
+use App\Console\Commands\InviaProgrammazione;
+use App\Mail\NotificaHtml;
 use App\Models\Legacy\Messaggio;
+use App\Services\Comunicazioni;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
@@ -11,9 +14,28 @@ use Livewire\Component;
 #[Title('Messaggi')]
 class ModelliMessaggio extends Component
 {
+    /** @var list<string> */
+    public const VARIABILI = [
+        '[OPERATORE]',
+        '[SEDE]',
+        '[DATA TURNO]',
+        '[ORA TURNO]',
+        '[INDIRIZZO]',
+        '[CERTIFICATO]',
+        '[DATA CERTIFICATO]',
+        '[OPERATORE CERTIFICATO]',
+        '[MATERIALE]',
+        '[DATA MATERIALE]',
+        '[OPERATORE MATERIALE]',
+    ];
+
     public bool $modal = false;
 
+    public bool $anteprima = false;
+
     public ?int $modelloId = null;
+
+    public string $anteprimaEmail = '';
 
     public array $f = [];
 
@@ -47,9 +69,31 @@ class ModelliMessaggio extends Component
         $messaggio = Messaggio::findOrFail($id);
         $this->modelloId = $messaggio->id;
         $this->f = $messaggio->only(['nome', 'giorni', 'ore', 'minuti', 'oggetto', 'mittente', 'modello_email', 'modello_sms', 'admin_email', 'admin_sms', 'numero_sms', 'numero_email'])
-            + ['invia_email' => $messaggio->invia_email, 'invia_sms' => $messaggio->invia_sms];
+            + ['invia_email' => $messaggio->invia_email, 'invia_sms' => false];
         $this->resetValidation();
         $this->modal = true;
+    }
+
+    public function visualizza(int $id, InviaProgrammazione $programmazione, Comunicazioni $comunicazioni): void
+    {
+        abort_unless(auth()->user()->isStaff(), 403);
+
+        $messaggio = Messaggio::findOrFail($id);
+        $this->anteprimaEmail = $messaggio->id === InviaProgrammazione::MODELLO
+            ? $programmazione->anteprima($comunicazioni, $messaggio)
+            : NotificaHtml::renderizza((string) $messaggio->oggetto, (string) $messaggio->modello_email);
+        $this->anteprima = true;
+    }
+
+    public function chiudi(): void
+    {
+        $this->modal = false;
+    }
+
+    public function chiudiAnteprima(): void
+    {
+        $this->anteprima = false;
+        $this->anteprimaEmail = '';
     }
 
     public function salva(): void
@@ -59,9 +103,9 @@ class ModelliMessaggio extends Component
         $this->validate();
         $dati = $this->f;
         $dati['invia_email'] = ! empty($dati['invia_email']) ? 'Y' : 'N';
-        $dati['invia_sms'] = ! empty($dati['invia_sms']) ? 'Y' : 'N';
+        $dati['invia_sms'] = 'N';
         Messaggio::findOrFail($this->modelloId)->update($dati);
-        $this->modal = false;
+        $this->chiudi();
     }
 
     public function render()

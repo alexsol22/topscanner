@@ -82,9 +82,21 @@ class Comunicazioni
     public function invia(array $destinatari, string $oggetto, string $messaggio, int $idOperatore = 0): int
     {
         if ($this->destinatarioProva !== null) {
-            Mail::to($this->destinatarioProva)->send(new NotificaHtml('[PROVA] '.$oggetto, $messaggio));
+            $inviate = 0;
 
-            return 1;
+            foreach ($destinatari as $indirizzo => $nome) {
+                try {
+                    Mail::to($indirizzo, $nome ?: null)->send(new NotificaHtml('[PROVA] '.$oggetto, $messaggio));
+                } catch (Throwable $e) {
+                    Log::error("Invio email di prova a {$indirizzo} fallito: {$e->getMessage()}");
+
+                    continue;
+                }
+
+                $inviate++;
+            }
+
+            return $inviate;
         }
 
         $html = NotificaHtml::renderizza($oggetto, $messaggio);

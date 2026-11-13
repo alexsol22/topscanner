@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Services\QrAziendale;
 use App\Services\QrSede;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
@@ -22,22 +23,20 @@ class GeneratoreQr extends Component
 {
     use WithFileUploads;
 
+    private const LIMITE_GIORNO = 200;
+
     public string $colore = '#000000';
 
     public string $titolo = '';
 
     public int $quantita = 1;
 
-    public string $modalita = 'nuovo';
-
-    public string $codiceEsistenteId = '';
+    public bool $personalizza = false;
 
     public $logo;
 
     /** @var array<int, array{id: int, codice: string}> */
     public array $appenaCreati = [];
-
-    public string $codiceId = '';
 
     public function mount(): void
     {
@@ -47,48 +46,48 @@ class GeneratoreQr extends Component
     public function generaLiberi(QrSede $qr): void
     {
         $this->autorizzaStaff();
+        set_time_limit(120);
+        $rimasti = $this->rimastiOggi();
         $dati = $this->validate(
             [
-                'modalita' => ['required', 'in:nuovo,esistente'],
-                'quantita' => ['exclude_unless:modalita,nuovo', 'required', 'integer', 'min:1', 'max:20'],
-                'codiceEsistenteId' => ['exclude_unless:modalita,esistente', 'required'],
-                'colore' => ['required', 'regex:/^#[0-9a-fA-F]{6}$/'],
-                'titolo' => ['nullable', 'string', 'max:40'],
-                'logo' => ['nullable', 'image', 'mimes:png,jpg,jpeg,webp', 'max:2048'],
+                'quantita' => ['required', 'integer', 'min:1', 'max:'.$rimasti],
+                'personalizza' => ['boolean'],
+                'colore' => ['exclude_unless:personalizza,true', 'required', 'regex:/^#[0-9a-fA-F]{6}$/'],
+                'titolo' => ['exclude_unless:personalizza,true', 'nullable', 'string', 'max:40'],
+                'logo' => ['exclude_unless:personalizza,true', 'nullable', 'image', 'mimes:png,jpg,jpeg,webp', 'max:2048'],
             ],
             [
-                'quantita.min' => 'Indica da 1 a 20 QR da generare.',
-                'quantita.max' => 'Indica da 1 a 20 QR da generare.',
-                'codiceEsistenteId.required' => 'Scegli un codice libero senza foto.',
+                'quantita.min' => 'Indica da 1 a 200 QR da generare.',
+                'quantita.max' => $this->messaggioQuantita($rimasti),
                 'titolo.max' => 'Il titolo può avere al massimo 40 caratteri.',
             ],
             [
                 'quantita' => 'quantità',
-                'codiceEsistenteId' => 'codice',
                 'titolo' => 'titolo',
                 'colore' => 'colore',
                 'logo' => 'logo',
             ],
         );
 
-        $titolo = trim(preg_replace('/\s+/u', ' ', $dati['titolo'] ?? '') ?? '');
-        $contenutoLogo = $this->logo?->get();
+        $personalizza = (bool) $dati['personalizza'];
+        $colore = $personalizza ? $dati['colore'] : '#000000';
+        $titolo = $personalizza ? trim(preg_replace('/\s+/u', ' ', $dati['titolo'] ?? '') ?? '') : '';
+        $contenutoLogo = $personalizza ? $this->logo?->get() : null;
+        $this->riserva($dati['quantita']);
         $creati = [];
         $riservati = [];
+        $dopo = null;
 
         try {
-            if ($dati['modalita'] === 'esistente') {
-                $creati[] = $this->salvaFotoSuCodiceEsistente($qr, $dati['colore'], $contenutoLogo, $titolo);
-            } else {
-                for ($i = 0; $i < $dati['quantita']; $i++) {
-                    $creati[] = $this->creaCodiceLibero($qr, $riservati, $dati['colore'], $contenutoLogo, $titolo);
-                    $riservati[] = $creati[array_key_last($creati)]->codice;
-                }
+            for ($i = 0; $i < $dati['quantita']; $i++) {
+                $creati[] = $this->creaCodiceLibero($qr, $riservati, $colore, $contenutoLogo, $titolo, $dopo);
+                $ultimo = $creati[array_key_last($creati)]->codice;
+                $riservati[] = $ultimo;
+                $dopo = $this->numeroCodice($ultimo) ?? $dopo;
             }
-        } catch (ValidationException $e) {
-            throw $e;
         } catch (Throwable $e) {
             $this->annullaCodici($creati, $qr);
+            $this->rilascia($dati['quantita']);
 
             throw $e;
         }
@@ -100,100 +99,96 @@ class GeneratoreQr extends Component
 
         $primo = $creati[0]->codice;
         $ultimo = $creati[array_key_last($creati)]->codice;
-        session()->flash('qr', $dati['modalita'] === 'esistente'
-            ? "Foto salvata su {$primo}."
-            : (count($creati) === 1
-                ? "Creato {$primo}."
-                : "Creati da {$primo} a {$ultimo}."));
+        session()->flash('qr', count($creati) === 1
+            ? "Creato {$primo}."
+            : "Creati da {$primo} a {$ultimo}.");
     }
 
-    public function render(QrAziendale $generatore, QrSede $qr)
+    public function render(QrAziendale $generatore)
     {
         $this->autorizzaStaff();
         $prossimo = Codice::prossimoCodice();
-        $logoDataUri = $this->logo
+        $titolo = $this->personalizza ? trim($this->titolo) : '';
+        $colore = $this->personalizza ? $this->colore : '#000000';
+        $logoDataUri = $this->personalizza && $this->logo
             ? 'data:'.$this->logo->getMimeType().';base64,'.base64_encode($this->logo->get())
             : null;
-        $codici = Codice::query()
-            ->whereNotNull('codice')
-            ->where('codice', '!=', '')
-            ->orderBy('codice')
-            ->get();
-        $disco = Storage::disk(config('filesystems.files_disk'));
-        $selezionato = $this->codiceId !== '' ? $codici->firstWhere('id', (int) $this->codiceId) : null;
-        $scelto = $this->codiceEsistenteId !== '' ? $codici->firstWhere('id', (int) $this->codiceEsistenteId) : null;
-        $elencoCodici = [];
-        $codiciSenzaFoto = [];
-
-        foreach ($codici as $codice) {
-            $haFoto = $disco->exists($qr->percorso($codice->codice));
-            $elencoCodici[] = [
-                'id' => (string) $codice->id,
-                'label' => $codice->codice.' — '.$this->etichettaCodice($codice, $haFoto),
-            ];
-
-            if ($this->eLibero($codice) && ! $haFoto) {
-                $codiciSenzaFoto[] = [
-                    'id' => (string) $codice->id,
-                    'label' => $codice->codice,
-                ];
-            }
-        }
-
-        $anteprima = $this->modalita === 'esistente' ? $scelto?->codice : $prossimo;
 
         return view('livewire.generatore-qr', [
             'prossimo' => $prossimo,
-            'anteprima' => $anteprima,
-            'svg' => $anteprima ? $generatore->svg($anteprima, trim($this->titolo), $logoDataUri, $this->colore) : null,
-            'elencoCodici' => collect($elencoCodici),
-            'codiciSenzaFoto' => collect($codiciSenzaFoto),
-            'pngSelezionato' => $selezionato && $disco->exists($qr->percorso($selezionato->codice)),
+            'rimasti' => $this->rimastiOggi(),
+            'svg' => $prossimo ? $generatore->svg($prossimo, $titolo, $logoDataUri, $colore) : null,
         ]);
     }
 
-    private function salvaFotoSuCodiceEsistente(QrSede $qr, string $colore, ?string $logo, string $titolo): Codice
+    private function chiaveGiorno(): string
     {
-        $codice = Codice::query()->find($this->codiceEsistenteId);
-
-        if (! $codice instanceof Codice || $codice->codice === null || $codice->codice === '' || ! $this->eLibero($codice)) {
-            throw ValidationException::withMessages([
-                'codiceEsistenteId' => 'Scegli un codice libero senza foto.',
-            ]);
-        }
-
-        if (Storage::disk(config('filesystems.files_disk'))->exists($qr->percorso($codice->codice))) {
-            throw ValidationException::withMessages([
-                'codiceEsistenteId' => 'Questo codice ha già la foto.',
-            ]);
-        }
-
-        $qr->genera($codice->codice, $colore, $logo, $titolo);
-
-        return $codice;
+        return 'generatore-qr.'.now()->toDateString();
     }
 
-    private function eLibero(Codice $codice): bool
+    private function generatiOggi(): int
     {
-        return $codice->stato === Codice::CREATO
-            && $codice->id_sede === null
-            && $codice->id_postazione === null;
+        return (int) Cache::get($this->chiaveGiorno(), 0);
     }
 
-    private function etichettaCodice(Codice $codice, bool $haFoto): string
+    private function rimastiOggi(): int
     {
-        $stato = $this->eLibero($codice) ? 'Libero' : 'Assegnato';
+        return max(0, self::LIMITE_GIORNO - $this->generatiOggi());
+    }
 
-        return $stato.', '.($haFoto ? 'con foto' : 'senza foto');
+    private function messaggioQuantita(int $rimasti): string
+    {
+        if ($rimasti === 0) {
+            return 'Hai già generato 200 codici oggi.';
+        }
+
+        if ($rimasti < self::LIMITE_GIORNO) {
+            return "Oggi puoi generarne ancora {$rimasti}.";
+        }
+
+        return 'Indica da 1 a 200 QR da generare.';
+    }
+
+    private function riserva(int $quantita): void
+    {
+        $chiave = $this->chiaveGiorno();
+        $totale = (int) Cache::increment($chiave, $quantita);
+        Cache::put($chiave, $totale, now()->endOfDay());
+
+        if ($totale <= self::LIMITE_GIORNO) {
+            return;
+        }
+
+        $this->rilascia($quantita);
+
+        throw ValidationException::withMessages([
+            'quantita' => $this->messaggioQuantita($this->rimastiOggi()),
+        ]);
+    }
+
+    private function rilascia(int $quantita): void
+    {
+        $chiave = $this->chiaveGiorno();
+        $totale = max(0, (int) Cache::decrement($chiave, $quantita));
+        Cache::put($chiave, $totale, now()->endOfDay());
+    }
+
+    private function numeroCodice(string $codice): ?int
+    {
+        if (preg_match('/^ITALPOL\*(\d{6})$/', $codice, $corrispondenza) !== 1) {
+            return null;
+        }
+
+        return (int) $corrispondenza[1];
     }
 
     /** @param  array<int, string>  $riservati */
-    private function creaCodiceLibero(QrSede $qr, array $riservati, string $colore, ?string $logo, string $titolo): Codice
+    private function creaCodiceLibero(QrSede $qr, array $riservati, string $colore, ?string $logo, string $titolo, ?int $dopo = null): Codice
     {
         $stringa = null;
 
         for ($tentativo = 1; $tentativo <= 5; $tentativo++) {
-            $proposta = Codice::prossimoCodice($riservati);
+            $proposta = Codice::prossimoCodice($riservati, $dopo);
 
             try {
                 $qr->genera($proposta, $colore, $logo, $titolo);
