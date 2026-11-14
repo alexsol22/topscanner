@@ -5,11 +5,12 @@ namespace App\Services;
 use App\Models\Legacy\Codice;
 use App\Models\Legacy\Gda;
 use App\Models\Legacy\Postazione;
+use App\Models\Legacy\Sede;
 use App\Models\Legacy\Turno;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 
-/** Timbratura: porting fedele di Turni::checkTurno / scansionaTurno / apriChiudiTurno / sostituzione (Yii). */
+/** Timbratura: porting di Turni::checkTurno / scansionaTurno / apriChiudiTurno / sostituzione (Yii). Il QR deve appartenere alla sede del turno; per il QR sede servono GPS e coordinate della sede. */
 class Timbratura
 {
     /** Turno dell'operatore valido adesso (finestra ±15 minuti su ora_inizio / ora_fine, come checkTurno). */
@@ -65,18 +66,27 @@ class Timbratura
     {
         $cod = Codice::where('codice', trim($codice))->where('stato', 'A')->first();
 
-        if (! $cod) {
+        if (! $cod || (int) $cod->id_sede !== (int) $turno->id_sede) {
             return $this->ko('Qrcode turno non riconosciuto');
         }
 
         $sede = $turno->sede;
-        // Come Yii: senza coordinate la posizione vale (0, 0), quindi il QR sede viene rifiutato per distanza.
-        $km = $sede
-            ? Calcoli::distanzaKm($lat ?? 0.0, $lng ?? 0.0, (float) $sede->lat, (float) $sede->lng)
-            : 0.0;
+        $km = 0.0;
 
-        if ($cod->tipo === 'S' && ($km * 1000) > (float) $sede?->distanza) {
-            return $this->ko('La tua posizione risulta essere superiore a '.$sede->distanza.' metri dalla sede operativa. contattare l\'amministrazione');
+        if ($cod->tipo === 'S') {
+            if ($lat === null || $lng === null) {
+                return $this->ko('Posizione non disponibile. Consenti il GPS per registrare la timbratura.');
+            }
+
+            if (! $this->sedeHaCoordinate($sede)) {
+                return $this->ko('La sede non ha coordinate impostate. Contattare l\'amministrazione.');
+            }
+
+            $km = Calcoli::distanzaKm($lat, $lng, (float) $sede->lat, (float) $sede->lng);
+
+            if (($km * 1000) > (float) $sede->distanza) {
+                return $this->ko('La tua posizione risulta essere superiore a '.$sede->distanza.' metri dalla sede operativa. contattare l\'amministrazione');
+            }
         }
 
         $postazione = null;
@@ -195,6 +205,11 @@ class Timbratura
         $fine = Gda::where('id_turno', $turno->id)->where('tipo', 'F')->first();
 
         return $inizio && $fine ? Calcoli::ore($inizio->rilevata_at, $fine->rilevata_at) : null;
+    }
+
+    private function sedeHaCoordinate(?Sede $sede): bool
+    {
+        return $sede !== null && ((float) $sede->lat !== 0.0 || (float) $sede->lng !== 0.0);
     }
 
     private function ko(string $message): array

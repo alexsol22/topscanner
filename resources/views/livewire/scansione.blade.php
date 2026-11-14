@@ -51,14 +51,14 @@
                 @error('nota') <p class="text-sm text-rose-700">{{ $message }}</p> @enderror
                 <div class="flex gap-3">
                     <button type="button" class="btn-soft min-h-12 flex-1 text-base" @click="annulla()" :disabled="caricamento">Chiudi</button>
-                    <button type="button" class="btn-primary min-h-12 flex-1 text-base" @click="conferma()" :disabled="caricamento">
+                    <button type="button" class="btn-primary min-h-12 flex-1 text-base" @click="conferma()" :disabled="caricamento || gps !== 'ok'">
                         <span x-show="!caricamento">Invia</span>
                         <span x-show="caricamento" x-cloak>Invio in corso…</span>
                     </button>
                 </div>
             </div>
 
-            <button type="button" class="btn-primary min-h-14 w-full !px-5 !py-4 text-base sm:text-lg" x-show="!camera && !codice" @click="avvia()" :disabled="!sostituzione && !{{ $turno ? 'true' : 'false' }}">
+            <button type="button" class="btn-primary min-h-14 w-full !px-5 !py-4 text-base sm:text-lg" x-show="!camera && !codice" @click="avvia()" :disabled="gps !== 'ok' || (!sostituzione && !{{ $turno ? 'true' : 'false' }})">
                 <span class="inline-flex items-center justify-center gap-3"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M7 12h10"/></svg> Scansiona il QR</span>
             </button>
             <button type="button" class="btn-soft min-h-12 w-full text-base" x-show="!camera && !codice && !sostituzione" @click="apriSostituzione()">Sostituisci turno</button>

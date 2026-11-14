@@ -75,6 +75,10 @@ document.addEventListener('alpine:init', () => {
 
         async conferma() {
             if (!this.codice || this.caricamento) return;
+            if (this.gps !== 'ok' || this.lat === null || this.lng === null) {
+                this.errore = 'Posizione non disponibile. Consenti il GPS per registrare la timbratura.';
+                return;
+            }
             this.caricamento = true;
             this.errore = null;
             try {

@@ -92,14 +92,47 @@ class TimbraturaTest extends TestCase
         ]);
     }
 
-    public function test_scansione_sede_senza_coordinate_viene_rifiutata_come_nel_vecchio_programma(): void
+    public function test_scansione_sede_senza_gps_non_registra_la_timbratura(): void
     {
         $esito = (new Timbratura)->scansionaTurno(Turno::findOrFail(1), User::findOrFail(1), 'ITALPOL*000001', null, null);
 
         $this->assertFalse($esito['ok']);
-        $this->assertStringContainsString('superiore a 100 metri', $esito['message']);
+        $this->assertSame('Posizione non disponibile. Consenti il GPS per registrare la timbratura.', $esito['message']);
         $this->assertSame(0, DB::table('tc_gda')->count());
         $this->assertSame('P', DB::table('tc_turni')->value('stato'));
+    }
+
+    public function test_qr_di_un_altra_sede_non_registra_la_timbratura(): void
+    {
+        DB::table('tc_sedi')->insert(['id' => 2, 'lat' => '41.9028', 'lng' => '12.4964', 'distanza' => 100]);
+        DB::table('tc_codici')->insert(['id' => 2, 'codice' => 'ITALPOL*000002', 'stato' => 'A', 'tipo' => 'S', 'id_sede' => 2]);
+
+        $esito = (new Timbratura)->scansionaTurno(Turno::findOrFail(1), User::findOrFail(1), 'ITALPOL*000002', 45.0567356, 7.6693);
+
+        $this->assertFalse($esito['ok']);
+        $this->assertSame('Qrcode turno non riconosciuto', $esito['message']);
+        $this->assertSame(0, DB::table('tc_gda')->count());
+        $this->assertSame('P', DB::table('tc_turni')->value('stato'));
+    }
+
+    public function test_scansione_sede_fuori_raggio_non_registra_la_timbratura(): void
+    {
+        $esito = (new Timbratura)->scansionaTurno(Turno::findOrFail(1), User::findOrFail(1), 'ITALPOL*000001', 41.9028, 12.4964);
+
+        $this->assertFalse($esito['ok']);
+        $this->assertStringContainsString('superiore a 100 metri', $esito['message']);
+        $this->assertSame(0, DB::table('tc_gda')->count());
+    }
+
+    public function test_sede_senza_coordinate_non_registra_la_timbratura(): void
+    {
+        DB::table('tc_sedi')->where('id', 1)->update(['lat' => '0', 'lng' => '0']);
+
+        $esito = (new Timbratura)->scansionaTurno(Turno::findOrFail(1), User::findOrFail(1), 'ITALPOL*000001', 41.9028, 12.4964);
+
+        $this->assertFalse($esito['ok']);
+        $this->assertSame('La sede non ha coordinate impostate. Contattare l\'amministrazione.', $esito['message']);
+        $this->assertSame(0, DB::table('tc_gda')->count());
     }
 
     public function test_scansione_sede_in_posizione_registra_inizio_e_poi_fine(): void
