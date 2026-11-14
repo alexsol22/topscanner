@@ -60,6 +60,7 @@ class SidebarTest extends TestCase
             route('presenze.clienti'),
             route('presenze.operatori'),
             route('messaggi.canale', ['canale' => 'email']),
+            route('messaggi.canale', ['canale' => 'whatsapp']),
         ] as $url) {
             $risposta->assertSee('href="'.$url.'"', false);
         }
@@ -80,7 +81,8 @@ class SidebarTest extends TestCase
             ->assertDontSee('SMS inviati')
             ->assertSee('Email inviate')
             ->assertSee('WhatsApp inviati')
-            ->assertSee('aria-disabled="true"', false)
+            ->assertDontSee('aria-disabled="true"', false)
+            ->assertDontSee('Presto')
             ->assertSee('Utenti')
             ->assertSee('Generatore QR')
             ->assertDontSee('Data Base');

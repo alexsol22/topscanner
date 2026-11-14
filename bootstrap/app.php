@@ -15,7 +15,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias(['ruolo' => RuoloRichiesto::class]);
         $middleware->redirectGuestsTo('/login');
-        $middleware->validateCsrfTokens(except: ['sms/consegna']);
+        $middleware->validateCsrfTokens(except: ['sms/consegna', 'whatsapp/webhook']);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

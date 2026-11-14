@@ -1,7 +1,7 @@
 <div class="space-y-5">
-    <h2 class="text-lg font-semibold text-slate-800">{{ $canale === 'sms' ? 'SMS inviati' : 'Email inviate' }}</h2>
+    <h2 class="text-lg font-semibold text-slate-800">{{ ['sms' => 'SMS inviati', 'email' => 'Email inviate', 'whatsapp' => 'WhatsApp inviati'][$canale] ?? 'Messaggi' }}</h2>
 
-    @if (in_array($canale, ['sms', 'email'], true))
+    @if (in_array($canale, ['sms', 'email', 'whatsapp'], true))
             <x-ui.filtri title="Filtri invii" :values="['filtroOperatore' => $filtroOperatore, 'filtroDal' => $filtroDal, 'filtroAl' => $filtroAl]">
               <section aria-label="Filtri invii" class="grid gap-3 sm:grid-cols-2">
                 <x-ui.select-search
@@ -143,11 +143,57 @@
                 </div>
             </section>
             {{ $emailInviate->links() }}
-    @else
-        <section class="card p-10 text-center">
-            <h2 class="text-lg font-semibold text-slate-800">WhatsApp non ancora disponibile</h2>
-            <p class="mt-2 text-sm text-slate-500">La consultazione dei messaggi WhatsApp sarà disponibile quando il canale verrà implementato.</p>
-        </section>
+    @elseif ($canale === 'whatsapp')
+            <section aria-label="WhatsApp inviati" class="card overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-sky-100">
+                        <thead class="bg-sky-50/60">
+                            <tr>
+                                <th class="th">Data</th>
+                                <th class="th">Operatore</th>
+                                <th class="th">Numero</th>
+                                <th class="th">Tipo</th>
+                                <th class="th">Messaggio</th>
+                                <th class="th">Stato</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-sky-50">
+                            @forelse ($whatsappInviati as $messaggio)
+                                <tr wire:key="whatsapp-{{ $messaggio->id }}" class="align-top hover:bg-sky-50/40">
+                                    <td class="td whitespace-nowrap">{{ $messaggio->data_invio?->format('d/m/Y H:i') ?? '—' }}</td>
+                                    <td class="td whitespace-nowrap">{{ $messaggio->operatore?->nome_completo ?? '—' }}</td>
+                                    <td class="td whitespace-nowrap">{{ $messaggio->destinatario }}</td>
+                                    <td class="td whitespace-nowrap">{{ $messaggio->tipo === 'template' ? 'Template' : 'Testo' }}</td>
+                                    <td class="td min-w-64 max-w-xl whitespace-pre-wrap break-words">
+                                        {{ $messaggio->testo }}
+                                        @if ($messaggio->template)
+                                            <span class="mt-1 block text-xs text-slate-400">{{ $messaggio->template }}@if ($messaggio->lingua) · {{ $messaggio->lingua }}@endif</span>
+                                        @endif
+                                    </td>
+                                    <td class="td whitespace-nowrap">
+                                        <span @class([
+                                            'rounded-full px-2.5 py-1 text-xs font-semibold',
+                                            'bg-amber-100 text-amber-700' => $messaggio->stato === \App\Enums\WhatsappStato::InAttesa,
+                                            'bg-sky-100 text-sky-700' => $messaggio->stato === \App\Enums\WhatsappStato::Inviato,
+                                            'bg-emerald-100 text-emerald-700' => in_array($messaggio->stato, [\App\Enums\WhatsappStato::Consegnato, \App\Enums\WhatsappStato::Letto], true),
+                                            'bg-rose-100 text-rose-700' => $messaggio->stato === \App\Enums\WhatsappStato::Fallito,
+                                        ])>{{ $messaggio->stato?->label() ?? '—' }}</span>
+                                        @if ($messaggio->errore)
+                                            <span class="mt-1 block max-w-xs whitespace-normal text-xs text-rose-600">{{ $messaggio->errore }}</span>
+                                        @endif
+                                        @if ($messaggio->aggiornato_il)
+                                            <span class="mt-1 block text-xs text-slate-400">{{ $messaggio->aggiornato_il->format('d/m/Y H:i') }}</span>
+                                        @endif
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr><td colspan="6" class="td py-10 text-center text-slate-500">Nessun WhatsApp inviato.</td></tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+            {{ $whatsappInviati->links() }}
     @endif
 
     @if ($modalEmail)

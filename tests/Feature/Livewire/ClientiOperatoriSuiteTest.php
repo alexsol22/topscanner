@@ -397,9 +397,12 @@ class ClientiOperatoriSuiteTest extends TestCase
         $mario = $this->operatore('Mario', 'Rossi', 'm@t.it');
         $this->operatore('Luca', 'Bianchi', 'l@t.it');
         DB::table('tc_admin')->insert(['id' => 1, 'user_type' => 4, 'attivo' => 'Y', 'nome' => 'Nascosto', 'cognome' => 'Root']);
+        DB::table('tc_admin')->insert(['id' => 910, 'user_type' => 3, 'attivo' => 'Y', 'nome' => 'Paolo', 'cognome' => 'Cliente', 'email' => 'paolo.cliente@t.it']);
+        DB::table('tc_admin')->insert(['id' => 911, 'user_type' => 2, 'attivo' => 'Y', 'nome' => 'Sara', 'cognome' => 'Staff', 'email' => 'sara.staff@t.it']);
 
         Livewire::actingAs($this->admin())->test(Operatori::class)
-            ->assertSee('Elenco operatori')
+            ->assertSee('Operatori')
+            ->assertDontSee('Elenco operatori')
             ->assertSee('aria-label="Aggiungi operatore"', false)
             ->assertSee('Mario')
             ->assertSee('aria-label="Modifica Mario Rossi"', false)
@@ -408,7 +411,14 @@ class ClientiOperatoriSuiteTest extends TestCase
             ->assertSee('alt="Foto di Mario Rossi"', false)
             ->assertSee('Luca')
             ->assertDontSee('Nascosto')
+            ->assertDontSee('Paolo')
+            ->assertDontSee('Sara')
             ->set('filtroCognome', 'Bianchi')->assertSee('Luca')->assertDontSee('Mario');
+
+        Livewire::actingAs($this->super())->test(Operatori::class)
+            ->assertSee('Mario')
+            ->assertDontSee('Paolo')
+            ->assertDontSee('Sara');
     }
 
     public function test_operator_filters_search_each_legacy_field_and_combine(): void

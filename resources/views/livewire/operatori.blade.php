@@ -98,7 +98,7 @@
     @if (! $editing)
         <div class="card overflow-hidden">
             <div class="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-                <h2 class="text-lg font-bold text-slate-800">Elenco operatori</h2>
+                <h2 class="text-lg font-bold text-slate-800">Operatori</h2>
                 <div class="flex items-center justify-end gap-2">
                     <x-ui.filtri title="Ricerca operatore" trigger-label="Ricerca operatore" :values="['filtroCodice' => $filtroCodice, 'filtroNome' => $filtroNome, 'filtroCognome' => $filtroCognome, 'filtroEmail' => $filtroEmail, 'filtroCellulare' => $filtroCellulare]">
                         <x-slot:trigger>

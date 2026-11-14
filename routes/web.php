@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\DownloadController;
 use App\Http\Controllers\SmsConsegnaController;
+use App\Http\Controllers\WhatsAppWebhookController;
 use App\Livewire;
 use App\Models\Legacy\Tracking;
 use Illuminate\Support\Facades\Auth;
@@ -47,6 +48,7 @@ Route::get('/manifest.webmanifest', function () {
 
 Route::get('/login', Livewire\Login::class)->name('login')->middleware('guest');
 Route::match(['get', 'post'], '/sms/consegna', SmsConsegnaController::class)->name('sms.consegna');
+Route::match(['get', 'post'], '/whatsapp/webhook', WhatsAppWebhookController::class)->name('whatsapp.webhook');
 Route::get('/recupera-password', Livewire\RecuperaPassword::class)->name('password.recupero')->middleware('guest');
 
 Route::post('/logout', function () {
@@ -114,7 +116,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/codici/{codice}/qrcode', [DownloadController::class, 'qrCodice'])->name('codici.qrcode');
         Route::get('/messaggi/modelli', fn () => redirect()->route('messaggi'))->name('messaggi.modelli');
         Route::get('/messaggi/{canale}', Livewire\Messaggi::class)
-            ->whereIn('canale', ['sms', 'email'])
+            ->whereIn('canale', ['sms', 'email', 'whatsapp'])
             ->name('messaggi.canale');
         Route::get('/impostazioni', Livewire\Impostazioni::class)->name('impostazioni');
     });

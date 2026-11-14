@@ -5,6 +5,7 @@ namespace App\Livewire;
 use App\Models\Legacy\Admin;
 use App\Models\Legacy\Email;
 use App\Models\Legacy\SendSms;
+use App\Models\Legacy\SendWhatsapp;
 use App\Models\Legacy\Tracking;
 use App\Services\Sms;
 use Carbon\CarbonImmutable;
@@ -37,7 +38,7 @@ class Messaggi extends Component
         abort_unless(auth()->user()->isStaff(), 403);
 
         if ($canale !== null) {
-            abort_unless(in_array($canale, ['sms', 'email'], true), 404);
+            abort_unless(in_array($canale, ['sms', 'email', 'whatsapp'], true), 404);
 
             $this->canale = $canale;
         }
@@ -115,6 +116,13 @@ class Messaggi extends Component
                 'emailInviate' => $this->applicaFiltriInvii(Email::query())
                     ->with('operatore:id,nome,cognome')
                     ->orderByDesc('data_invio')
+                    ->paginate(25),
+            ],
+            $this->canale === 'whatsapp' => [
+                'whatsappInviati' => $this->applicaFiltriInvii(SendWhatsapp::query())
+                    ->with('operatore:id,nome,cognome')
+                    ->orderByDesc('data_invio')
+                    ->orderByDesc('id')
                     ->paginate(25),
             ],
             default => [],

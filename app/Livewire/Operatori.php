@@ -26,7 +26,7 @@ use Livewire\Component;
 use Livewire\WithFileUploads;
 
 #[Layout('layouts::app')]
-#[Title('Operatori e utenti')]
+#[Title('Operatori')]
 class Operatori extends Component
 {
     use WithFileUploads;
@@ -590,6 +590,7 @@ class Operatori extends Component
     private function queryElencoOperatori()
     {
         return $this->query()
+            ->where('user_type', Ruolo::Operatore->tipoLegacy())
             ->when($this->filtroCodice !== '', fn ($q) => $q->where('codice', 'like', "%{$this->filtroCodice}%"))
             ->when($this->filtroNome !== '', fn ($q) => $q->where('nome', 'like', "%{$this->filtroNome}%"))
             ->when($this->filtroCognome !== '', fn ($q) => $q->where('cognome', 'like', "%{$this->filtroCognome}%"))

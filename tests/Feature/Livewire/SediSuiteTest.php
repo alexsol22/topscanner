@@ -747,6 +747,25 @@ class SediSuiteTest extends TestCase
         $this->assertSame(0, DB::table('tc_sedi')->count());
     }
 
+    public function test_invalid_action_radius_opens_the_position_tab(): void
+    {
+        $cliente = $this->cliente();
+        $codice = DB::table('tc_codici')->insertGetId(['codice' => 'ITALPOL*000501', 'stato' => 'C']);
+        DB::table('_comuni')->insert(['id' => 1, 'comune' => 'Modena', 'sigla_provincia' => 'MO', 'id_provincia' => 1]);
+
+        Livewire::actingAs($this->admin())->test(SedeForm::class)
+            ->set('codiceSedeId', (string) $codice)
+            ->set('f.cliente_id', $cliente)->set('f.descrizione', 'Sede valida')->set('f.indirizzo', 'Via Roma 1')
+            ->set('f.citta', 'Modena')->set('f.provincia', 'MO')->set('f.lat', '44.5')->set('f.lng', '10.9')
+            ->set('f.distanza_max', 1)
+            ->call('salva')
+            ->assertHasErrors(['f.distanza_max' => 'Il campo f.distanza max deve essere almeno 10.'])
+            ->assertDispatched('tab-errore', tab: 'posizione')
+            ->assertSee("Raggio d'azione");
+
+        $this->assertSame(0, DB::table('tc_sedi')->count());
+    }
+
     public function test_station_title_over_255_characters_is_rejected(): void
     {
         [$form, $chiave, $codicePostazione] = $this->formConPostazione();

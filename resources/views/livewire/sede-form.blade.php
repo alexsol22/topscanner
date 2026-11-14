@@ -1,7 +1,7 @@
 @php
     $tabs = [
-        'dati' => ['Dati sede', 'M3 21h18M5 21V7l7-4 7 4v14M9 10h.01M12 10h.01M15 10h.01M9 13h.01M12 13h.01M15 13h.01M10 21v-4h4v4', ['f.cliente_id', 'f.descrizione', 'f.colore', 'f.telefono', 'f.email', 'f.note', 'f.distanza_max', 'foto']],
-        'posizione' => ['Posizione', 'M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0zM15 11a3 3 0 11-6 0 3 3 0 016 0z', ['f.indirizzo', 'f.cap', 'f.citta', 'f.provincia', 'f.lat', 'f.lng']],
+        'dati' => ['Dati sede', 'M3 21h18M5 21V7l7-4 7 4v14M9 10h.01M12 10h.01M15 10h.01M9 13h.01M12 13h.01M15 13h.01M10 21v-4h4v4', ['f.cliente_id', 'f.descrizione', 'f.colore', 'f.telefono', 'f.email', 'f.note', 'foto']],
+        'posizione' => ['Posizione', 'M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0zM15 11a3 3 0 11-6 0 3 3 0 016 0z', ['f.indirizzo', 'f.cap', 'f.citta', 'f.provincia', 'f.lat', 'f.lng', 'f.distanza_max']],
         'pos' => ['Pos', 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z', ['f.tariffa', 'f.pos', 'f.inizio_contratto', 'f.fine_contratto', 'ore.*']],
         'postazioni' => ['Postazioni', 'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10', ['postazioni.*', 'immaginiPostazioni.*']],
     ];
@@ -43,9 +43,6 @@
                         :empty-value="''"
                     />
                     <p class="mt-1 text-xs text-slate-500">Elenco dei codici liberi, in ordine di numerazione. Se non ce ne sono, «CODICE DA GENERARE» assegna il numero successivo.</p>
-                </x-ui.field>
-                <x-ui.field label="Distanza massima scansione" name="f.distanza_max">
-                    <div class="relative"><input type="number" wire:model.live.debounce.400ms="f.distanza_max" class="input !pr-10"><span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-slate-400">m</span></div>
                 </x-ui.field>
                 <x-ui.field label="Cliente *" name="f.cliente_id">
                     <x-select-ricerca
@@ -183,6 +180,9 @@
                     <x-ui.field label="Città" name="f.citta" class="sm:col-span-2"><input wire:model="f.citta" class="input"></x-ui.field>
                     <x-ui.field label="Latitudine" name="f.lat"><input wire:model="f.lat" class="input"></x-ui.field>
                     <x-ui.field label="Longitudine" name="f.lng"><input wire:model="f.lng" class="input"></x-ui.field>
+                    <x-ui.field label="Raggio d'azione" name="f.distanza_max" class="sm:col-span-2">
+                        <div class="relative"><input type="number" wire:model.live.debounce.400ms="f.distanza_max" class="input !pr-10" min="10" max="5000"><span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-slate-400">m</span></div>
+                    </x-ui.field>
                 </div>
             </div>
         </section>

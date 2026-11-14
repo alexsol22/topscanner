@@ -494,7 +494,7 @@ class SedeForm extends Component
             return 'pos';
         }
 
-        if (in_array($campo, ['f.indirizzo', 'f.cap', 'f.citta', 'f.provincia', 'f.lat', 'f.lng'], true)) {
+        if (in_array($campo, ['f.indirizzo', 'f.cap', 'f.citta', 'f.provincia', 'f.lat', 'f.lng', 'f.distanza_max'], true)) {
             return 'posizione';
         }
 
